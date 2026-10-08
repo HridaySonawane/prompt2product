@@ -34,6 +34,20 @@ struct Requirements {
     double max_latency_ms;
     double min_reliability;
 };
+struct SimulationConfig {
+    bool enabled = false;
+    double metres_per_unit = 0.05;
+    unsigned int seed = 1337;
+    int packets_per_device = 200;
+    double transmit_power_dbm = 14;
+    double reference_loss_db = 40;
+    double path_loss_exponent = 3;
+    double sensitivity_dbm = -72;
+    int retries = 2;
+    double packet_airtime_ms = 30;
+    double retry_delay_ms = 100;
+    double backhaul_latency_ms = 20;
+};
 struct SimulationInput {
     std::string schema_version;
     Floor floor;
@@ -43,6 +57,7 @@ struct SimulationInput {
     std::vector<Gateway> gateways;
     Reception reception;
     Requirements requirements;
+    SimulationConfig simulation;
 };
 struct GeometryLink {
     std::string source;

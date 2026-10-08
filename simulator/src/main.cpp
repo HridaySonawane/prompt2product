@@ -1,5 +1,6 @@
 #include "geometry.hpp"
 #include "json_io.hpp"
+#include "network.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -16,7 +17,7 @@ int main(int argc, char* argv[]) {
             input = &file;
         }
         const auto request = iot::load_input(*input);
-        const auto response = iot::success_response(iot::evaluate_geometry(request));
+        const auto response = iot::evaluate_network(request, iot::success_response(iot::evaluate_geometry(request)));
         std::cout << response.dump() << '\n';
         return 0;
     } catch (const nlohmann::json::exception& e) {

@@ -120,6 +120,36 @@ SimulationInput parse_input(const nlohmann::json& j) {
         number(requirements, "max_latency_ms", "$.requirements"),
         fraction(requirements, "min_reliability", "$.requirements")};
     if (input.requirements.max_latency_ms < 0) invalid("$.requirements.max_latency_ms", "must be non-negative");
+    if (j.contains("simulation")) {
+        const auto& s = j.at("simulation");
+        if (!s.is_object()) invalid("$.simulation", "expected an object");
+        auto& config = input.simulation;
+        config.enabled = true;
+        config.metres_per_unit = positive(s, "metres_per_unit", "$.simulation");
+        if (config.metres_per_unit > 1000) invalid("$.simulation.metres_per_unit", "must be at most 1000");
+        auto optional_number = [&](const char* key, double& target, double minimum, double maximum) {
+            if (!s.contains(key)) return;
+            target = number(s, key, "$.simulation");
+            if (target < minimum || target > maximum) invalid(std::string("$.simulation.") + key, "out of supported range");
+        };
+        optional_number("transmit_power_dbm", config.transmit_power_dbm, -100, 100);
+        optional_number("reference_loss_db", config.reference_loss_db, 0, 200);
+        optional_number("path_loss_exponent", config.path_loss_exponent, 1, 6);
+        optional_number("sensitivity_dbm", config.sensitivity_dbm, -150, 0);
+        optional_number("packet_airtime_ms", config.packet_airtime_ms, 0.001, 60000);
+        optional_number("retry_delay_ms", config.retry_delay_ms, 0, 60000);
+        optional_number("backhaul_latency_ms", config.backhaul_latency_ms, 0, 60000);
+        auto integer = [&](const char* key, unsigned int minimum, unsigned int maximum, unsigned int fallback) {
+            if (!s.contains(key)) return fallback;
+            const auto& value = s.at(key);
+            if (!value.is_number_integer() || value.get<double>() < minimum || value.get<double>() > maximum)
+                invalid(std::string("$.simulation.") + key, "expected an integer in the supported range");
+            return value.get<unsigned int>();
+        };
+        config.seed = integer("seed", 0, 4294967295U, config.seed);
+        config.packets_per_device = static_cast<int>(integer("packets_per_device", 1, 10000, 200));
+        config.retries = static_cast<int>(integer("retries", 0, 10, 2));
+    }
     std::unordered_set<std::string> room_ids;
     for (const auto& room : input.rooms) room_ids.insert(room.id);
     for (const auto& device : input.devices)
@@ -145,6 +175,15 @@ nlohmann::json serialize_input(const SimulationInput& in) {
     for (const auto& d : in.devices) j["devices"].push_back({{"id", d.id},
         {"type", enum_string(d.type, device_types)}, {"x", d.x}, {"y", d.y}, {"room_id", d.room_id}});
     for (const auto& g : in.gateways) j["gateways"].push_back({{"id", g.id}, {"x", g.x}, {"y", g.y}, {"active", g.active}});
+    if (in.simulation.enabled) {
+        const auto& s = in.simulation;
+        j["simulation"] = {{"metres_per_unit", s.metres_per_unit}, {"seed", s.seed},
+            {"packets_per_device", s.packets_per_device}, {"transmit_power_dbm", s.transmit_power_dbm},
+            {"reference_loss_db", s.reference_loss_db}, {"path_loss_exponent", s.path_loss_exponent},
+            {"sensitivity_dbm", s.sensitivity_dbm}, {"retries", s.retries},
+            {"packet_airtime_ms", s.packet_airtime_ms}, {"retry_delay_ms", s.retry_delay_ms},
+            {"backhaul_latency_ms", s.backhaul_latency_ms}};
+    }
     // Validate model values before exposing them as contract JSON.
     (void)parse_input(j);
     return j;

@@ -20,7 +20,7 @@ FetchContent_Declare(nlohmann_json
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-add_library(simulator_core src/geometry.cpp src/json_io.cpp)
+add_library(simulator_core src/geometry.cpp src/json_io.cpp src/network.cpp)
 target_include_directories(simulator_core PUBLIC include)
 target_link_libraries(simulator_core PUBLIC nlohmann_json::nlohmann_json)
 if(MSVC)
@@ -32,6 +32,9 @@ target_link_libraries(iot_simulator PRIVATE simulator_core)
 include(CTest)
 if(BUILD_TESTING)
     add_executable(simulator_tests tests/test_main.cpp)
+    add_executable(network_tests tests/test_network.cpp)
+    target_link_libraries(network_tests PRIVATE simulator_core)
+    add_test(NAME signal_and_packets COMMAND network_tests "${CMAKE_CURRENT_SOURCE_DIR}/../shared/fixtures/basic-hotel.json")
     target_link_libraries(simulator_tests PRIVATE simulator_core)
     add_test(NAME geometry_and_contract COMMAND simulator_tests "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_test(NAME cli_contract COMMAND ${CMAKE_COMMAND}

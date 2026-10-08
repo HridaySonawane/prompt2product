@@ -1,42 +1,332 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "IoTForge output, schema 1.0, CP01-02",
-  "description": "One geometry result or structured error. No signal or network metrics in this checkpoint. Finite numeric values only.",
+  "title": "IoTForge output, schema 1.0",
+  "description": "Geometry plus optional calculated radio/network fields. Undefined delivery latency is null. Error uses a nonzero process exit.",
   "type": "object",
-  "required": ["schema_version", "status"],
-  "properties": {"schema_version": {"const": "1.0"}},
+  "required": [
+    "schema_version",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    }
+  },
   "oneOf": [
     {
-      "required": ["geometry"],
+      "required": [
+        "geometry"
+      ],
       "properties": {
-        "status": {"const": "ok"},
+        "status": {
+          "const": "ok"
+        },
         "geometry": {
-          "type": "object", "required": ["links"],
-          "properties": {"links": {"type": "array", "items": {"$ref": "#/$defs/link"}}}
+          "type": "object",
+          "required": [
+            "links"
+          ],
+          "properties": {
+            "links": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/link"
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "coverage",
+            "reliability",
+            "total_devices",
+            "reachable_devices",
+            "generated_messages",
+            "delivered_messages",
+            "lost_messages",
+            "average_latency_ms",
+            "worst_latency_ms"
+          ],
+          "properties": {
+            "coverage": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "reliability": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "total_devices": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reachable_devices": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "generated_messages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "delivered_messages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lost_messages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "average_latency_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "worst_latency_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "device_id",
+              "gateway_id",
+              "reachable",
+              "rssi_dbm",
+              "generated_messages",
+              "delivered_messages",
+              "lost_messages",
+              "reliability",
+              "average_latency_ms",
+              "worst_latency_ms"
+            ],
+            "properties": {
+              "device_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "gateway_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reachable": {
+                "type": "boolean"
+              },
+              "rssi_dbm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "generated_messages": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "delivered_messages": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lost_messages": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reliability": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "average_latency_ms": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "worst_latency_ms": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "requirements_evaluation": {
+          "type": "object",
+          "required": [
+            "pass",
+            "checks",
+            "diagnostics"
+          ],
+          "properties": {
+            "pass": {
+              "type": "boolean"
+            },
+            "checks": {
+              "type": "object",
+              "required": [
+                "coverage",
+                "reliability",
+                "latency",
+                "monitoring"
+              ],
+              "properties": {
+                "coverage": {
+                  "type": "boolean"
+                },
+                "reliability": {
+                  "type": "boolean"
+                },
+                "latency": {
+                  "type": "boolean"
+                },
+                "monitoring": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "required": [
+            "name",
+            "metres_per_unit",
+            "seed",
+            "sensitivity_dbm",
+            "reception_backhaul"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "metres_per_unit": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sensitivity_dbm": {
+              "type": "number"
+            },
+            "reception_backhaul": {
+              "type": "string"
+            }
+          }
         }
       },
-      "not": {"required": ["error"]}
+      "not": {
+        "required": [
+          "error"
+        ]
+      },
+      "dependentRequired": {
+        "summary": [
+          "devices",
+          "requirements_evaluation",
+          "model"
+        ]
+      }
     },
     {
-      "required": ["error"],
+      "required": [
+        "error"
+      ],
       "properties": {
-        "status": {"const": "error"},
+        "status": {
+          "const": "error"
+        },
         "error": {
-          "type": "object", "required": ["code", "message"],
-          "properties": {"code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}}
+          "type": "object",
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       },
-      "not": {"required": ["geometry"]}
+      "not": {
+        "required": [
+          "geometry"
+        ]
+      }
     }
   ],
   "$defs": {
     "link": {
-      "type": "object", "required": ["source", "destination", "distance", "walls_crossed", "wall_attenuation_db"],
+      "type": "object",
+      "required": [
+        "source",
+        "destination",
+        "distance",
+        "walls_crossed",
+        "wall_attenuation_db"
+      ],
       "properties": {
-        "source": {"type": "string", "minLength": 1}, "destination": {"type": "string", "minLength": 1},
-        "distance": {"type": "number", "minimum": 0},
-        "walls_crossed": {"type": "integer", "minimum": 0},
-        "wall_attenuation_db": {"type": "number", "minimum": 0}
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "destination": {
+          "type": "string",
+          "minLength": 1
+        },
+        "distance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "walls_crossed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wall_attenuation_db": {
+          "type": "number",
+          "minimum": 0
+        },
+        "distance_metres": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rssi_dbm": {
+          "type": "number"
+        },
+        "gateway_active": {
+          "type": "boolean"
+        },
+        "reachable": {
+          "type": "boolean"
+        }
       }
     }
   }
