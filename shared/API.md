@@ -24,11 +24,43 @@ The backend does not alter field names or compute substitute metrics.
 ```
 
 `layout` is an object, not a string: the text above is illustrative shorthand.
-Response: `{schema_version, status, layout, simulation, planner, placement_validated}`.
+Response: `{schema_version, status, layout, simulation, planner, placement_validated, design_request}`.
 `layout` matches input schema; `simulation` matches output schema and comes from
 an actual C++ invocation. AI interprets monitoring intent/thresholds and proposes
 gateway positions; sensors are placed at centres of the requested room categories.
 Generated points must be inside their assigned rooms/floor and pass C++ validation.
+
+Explicit area counts create a **new building** on the existing floor and physical
+scale: for example `2 rooms, 1 bathroom, 1 lobby, 1 gateway`. The backend builds
+non-overlapping rectangles and replaces the previous areas/walls/devices/gateways.
+Unspecified area categories have count zero; it does not retain default rooms.
+The required reception point lives in a requested reception area, lobby or another
+surviving area; it does not create an unrequested reception room. Generated areas
+have a 16 logical-unit gap and minimum 64x64 size, and four drywall boundaries
+each. New guest rooms receive temperature sensors; bathrooms receive leak sensors.
+Ollama interprets monitoring thresholds and proposes gateway positions; the area
+packing and sensor centres are deterministic, rather than model-drawn floor plans.
+
+Counts accept digits or simple English count words (for example two or twenty),
+with room/guest room/bedroom,
+bathroom/washroom, lobby, reception and gateway names. One to 32 total areas must
+fit the floor; gateway counts must be one or two. Conflicting, negative, fractional,
+out-of-range or unfit requests return structured HTTP 422. Use digits for compound
+counts such as 21. Monitoring-only requests
+without area counts preserve existing areas/walls/reception. `all five rooms` is
+an existing-building reference. A gateway-only count changes gateways, not areas.
+General architectural prose, dimensions and arbitrary adjacency constraints are
+not interpreted as a CAD design; use explicit counts and the editor for changes.
+
+`design_request` is an additive **backend envelope** field, not a C++ schema
+change: `{mode, requested_counts, actual_counts, matched}`. Mode is `new_layout`
+or `existing_layout`; count keys are `room`, `bathroom`, `lobby`, `reception` and
+`gateways`. Only explicitly constrained counts (plus zeroed area categories when
+rebuilding) appear in requested_counts. Counts must match before success is
+returned, including during a visibly labeled AI fallback. This verifies counts;
+it does not mean C++ network requirements passed. Inspect
+`simulation.requirements_evaluation.pass` independently. Successful design logs
+record mode, requested/actual counts and planner source in backend stderr.
 
 `POST /api/optimize`: `{layout: <complete input>, prompt?: <string>}`.
 Response: `{schema_version, status, layout, before, after, improved,
@@ -51,7 +83,8 @@ requirements actually pass after recovery. `affected_devices` lists unreachable 
 ## Planner provenance
 
 `planner` contains source, optional model, reasoning, and optional warning.
-- `ollama`: final proposal came from the actual local model and was C++ verified.
+- `ollama`: gateway/monitoring proposal came from the actual local model; the
+  final layout was C++ simulated. Area packing and sensor centres are rule-based.
 - `deterministic_fallback`: rule-based design or bounded verified optimization;
   **not AI**. Display the label and warning visibly.
 - `scenario` / `deterministic_verified_search`: failure/backup operation, not an AI claim.

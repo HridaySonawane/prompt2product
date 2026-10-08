@@ -118,6 +118,15 @@ See the archive's `START-HERE.txt`; the source build commands apply to this repo
    Choose independent wall segments and their materials in the Walls tab.
 2. Click **Plan deployment**, enter monitoring requirements, and click **Generate design**. Verify that the
    provenance says **Ollama**, and that sensors and the gateway appear on the floor.
+   To replace the default building, use explicit counts such as **2 rooms, 1
+   bathroom, 1 lobby, 1 gateway**. This creates four areas and three sensors;
+   reception remains a point in the lobby, without an extra room. Unspecified
+   area types are omitted. Area packing uses rectangles with drywall boundaries;
+   Ollama proposes monitoring thresholds and gateway placement. A monitoring-only
+   prompt such as **Monitor all rooms and bathroom leaks** keeps the existing
+   building. **Optimize placement** also keeps its areas and sensors. Count
+   matching and network PASS/FAIL are separate checks; a generated design can fail
+   the network requirements and need optimization. See [design-fix evidence](demo/DESIGN-ACCEPTANCE.md).
 3. Click **Simulate network**. Inspect metrics, requirements, per-sensor results,
    signal heatmap and device-to-gateway geometry. Toggle the heatmap to inspect
    room boundaries. Layout edits clear results until the next real run.

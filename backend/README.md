@@ -14,6 +14,15 @@ Optimization sends actual diagnostics and retains a result only if verified
 better; a bounded fallback search is clearly identified. Failure/recovery always
 runs real C++ and preserves original requirements.
 
+Explicit counts in `/api/design` now replace the building instead of reusing
+default rooms. `design_layout.py` parses bounded area/gateway counts, packs
+rectangles and validates count agreement before returning success. Without area
+counts the existing building remains. `design_request` reports the operation and
+requested/actual counts; shared simulator schema 1.0 is unchanged. See
+shared/API.md for limits and reception/wall policy. Backend stderr logs completed
+design counts and planner provenance. After updating Python source, restart the
+root launcher; it does not enable automatic reload.
+
 Configuration environment variables:
 - IOTFORGE_SIMULATOR_PATH: absolute or repo-relative executable path.
 - IOTFORGE_SIMULATOR_TIMEOUT: positive seconds, default 10.
@@ -26,5 +35,9 @@ Install: `python -m venv backend/.venv`, then the environment's Python with
 `-m pip install -r backend/requirements-dev.txt`.
 Test: `backend/.venv/Scripts/python.exe -m unittest discover -s backend/tests -v`.
 Live: `backend/.venv/Scripts/python.exe demo/verify_final.py --require-ai`.
+Count regression with real Ollama/C++ and current source (no server restart):
+`backend/.venv/Scripts/python.exe demo/verify_design.py`.
+After restarting the app, test live HTTP with the same command followed by
+`--url http://127.0.0.1:8000`.
 Production needs requirements.txt only. Bind to loopback; this hackathon MVP
 has no accounts, authentication, persistence or public-hosting hardening.

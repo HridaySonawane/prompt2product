@@ -648,6 +648,8 @@ export default function App() {
       const value = (await response.json()) as ScenarioResult;
       if (!response.ok || value.status !== "ok")
         throw new Error(value.error?.message ?? `HTTP ${response.status}`);
+      if (operation === "design" && value.design_request?.matched === false)
+        throw new Error("Generated design did not match the requested counts");
       const nextResult = value.simulation ?? value.after;
       if (!nextResult)
         throw new Error("Simulation result missing from response");
@@ -681,7 +683,9 @@ export default function App() {
       );
       setNotice(
         operation === "design"
-          ? "Design placed and verified by C++."
+          ? value.design_request?.mode === "new_layout"
+            ? "Requested area counts matched · network simulated by C++."
+            : "Placement updated in the existing building · network simulated by C++."
           : operation === "optimize"
             ? value.improved
               ? "Verified improvement · compare the real runs below."
@@ -836,8 +840,9 @@ export default function App() {
                 <DialogHeader>
                   <DialogTitle>Plan deployment</DialogTitle>
                   <DialogDescription>
-                    Describe your monitoring needs. Review the proposed
-                    placement and its simulation results.
+                    Specify area counts to create a new layout, or describe
+                    monitoring needs for the current building. Review the
+                    placement and calculated results.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="ai-availability">
@@ -851,7 +856,7 @@ export default function App() {
                   {aiStatus.replace("Local AI · ", "Ollama · ")}
                 </div>
                 <label htmlFor="requirements-prompt">
-                  Monitoring requirements
+                  Layout and monitoring requirements
                   <textarea
                     id="requirements-prompt"
                     maxLength={4000}
@@ -885,8 +890,9 @@ export default function App() {
                   </p>
                 )}
                 <p className="dialog-footnote">
-                  Proposals are checked by the simulator. Unavailable AI is
-                  clearly identified as a rule-based fallback.
+                  Example: 2 rooms, 1 bathroom, 1 lobby, 1 gateway. Explicit area
+                  counts replace the current areas and walls. Optimize placement
+                  keeps the building. AI fallback is clearly labeled.
                 </p>
               </DialogContent>
             </Dialog>

@@ -1,11 +1,15 @@
 """Local AI proposes layouts; the independent C++ engine verifies every result."""
 import copy
 import json
+import logging
 import re
 import urllib.request
 
 from .contract import INPUT_VALIDATOR, load_json, validation_message
 from .simulator import SimulatorError
+from .design_layout import AREA_TYPES, build_layout, explicit_counts, verify_counts
+
+LOGGER = logging.getLogger("uvicorn.error.planning")
 
 
 def object_schema(properties):
@@ -132,24 +136,48 @@ def room_position(layout, point):
             'y': min(max(point['y'], room['y'] + dy), room['y'] + room['height'] - dy)}
 
 
+def default_gateway_points(layout, count):
+    first = room_position(layout, centroid(layout))
+    if count == 1:
+        return [first]
+    # Spread a fallback pair over area interiors instead of stacking both icons.
+    points = [room_position(layout, {'x': r['x'] + r['width'] * fraction,
+                                    'y': r['y'] + r['height'] / 2})
+              for r in layout['rooms'] for fraction in (.25, .75)]
+    second = max(points, key=lambda p: (p['x'] - first['x']) ** 2 + (p['y'] - first['y']) ** 2)
+    return [first, second]
+
+
 def design(runner, settings, layout, prompt):
-    candidate = copy.deepcopy(layout)
+    counts = explicit_counts(prompt)
+    rebuilding = any(key in counts for key in AREA_TYPES)
+    candidate = build_layout(layout, counts)
+    schema = copy.deepcopy(DESIGN_SCHEMA)
+    if "gateways" in counts:
+        schema['properties']['gateways'].update(minItems=counts['gateways'], maxItems=counts['gateways'])
     source, warning = "ollama", None
     try:
-        proposal = ask_ollama(settings, DESIGN_SCHEMA,
+        proposal = ask_ollama(settings, schema,
             "Interpret the monitoring requirements. Place one or two gateways inside the floor. "
+            "The building already matches the user's explicit area counts; do not add areas. "
+            "Requested gateway count (if specified) is mandatory: " + str(counts.get('gateways', 'one or two')) + ". "
             "Temperature monitoring means one temperature sensor in each guest room; leak detection means one leak sensor in each bathroom. "
             "Preserve existing numeric requirements unless the user specifies a replacement.\nRequest: " + prompt +
-            "\nLayout: " + json.dumps(compact_context(layout)))
+            "\nLayout: " + json.dumps(compact_context(candidate)))
+        if "gateways" in counts and len(proposal['gateways']) != counts['gateways']:
+            raise ValueError("AI proposal did not match requested gateway count")
     except Exception as exc:
         # Network/model/schema failures must never be presented as AI success.
         source, warning = "deterministic_fallback", "Local AI unavailable or returned an invalid proposal: " + str(exc)[:240]
         proposal = {"monitor_temperature": True, "detect_leaks": True,
             "requirements": fallback_requirements(prompt, layout["requirements"]),
-            "gateways": [centroid(layout)], "reasoning": "Rule-based fallback: room-centre sensors and sensor-centroid gateway."}
+            "gateways": default_gateway_points(candidate, counts.get('gateways', 1)), "reasoning": "Rule-based fallback: requested areas, room-centre sensors and central gateways."}
     candidate["devices"] = []
     for room in candidate["rooms"]:
-        kind = "temperature_sensor" if room["type"] == "room" and proposal["monitor_temperature"] else "leak_sensor" if room["type"] == "bathroom" and proposal["detect_leaks"] else None
+        # New buildings receive the MVP's full monitoring set even when a vague
+        # design prompt omits sensor wording. Existing monitoring-only behavior
+        # still honors the model's temperature/leak category selection.
+        kind = "temperature_sensor" if room["type"] == "room" and (rebuilding or proposal["monitor_temperature"]) else "leak_sensor" if room["type"] == "bathroom" and (rebuilding or proposal["detect_leaks"]) else None
         if kind:
             candidate["devices"].append({"id": ("temp_" if kind == "temperature_sensor" else "leak_") + room["id"],
                 "type": kind, "x": room["x"] + room["width"] / 2, "y": room["y"] + room["height"] / 2, "room_id": room["id"]})
@@ -159,11 +187,19 @@ def design(runner, settings, layout, prompt):
         validate_placement(candidate)
     except ValueError as exc:
         source, warning = "deterministic_fallback", "Rejected AI placement: " + str(exc)
-        candidate["gateways"] = [{"id": "gateway_1", **room_position(candidate, centroid(candidate)), "active": True}]
+        candidate["gateways"] = [{"id": "gateway_" + str(index + 1), **room_position(candidate, point), "active": True}
+            for index, point in enumerate(default_gateway_points(candidate, counts.get('gateways', 1)))]
         candidate["requirements"] = fallback_requirements(prompt, layout["requirements"])
         validate_placement(candidate)
+    actual = verify_counts(candidate, counts)
     result = simulate(runner, candidate)
+    mode = 'new_layout' if rebuilding else 'existing_layout'
+    LOGGER.info("design completed mode=%s requested_counts=%s actual_counts=%s planner=%s simulation_status=%s",
+                mode, json.dumps(counts, sort_keys=True), json.dumps(actual, sort_keys=True), source, result['status'])
+    if rebuilding:
+        proposal['reasoning'] += " Requested area counts were used to build a rectangular layout with drywall boundaries."
     return {"schema_version": "1.0", "status": "ok", "layout": candidate, "simulation": result,
+        "design_request": {"mode": mode, "requested_counts": counts, "actual_counts": actual, "matched": True},
         "planner": {"source": source, "model": settings.ollama_model if source == "ollama" else None,
                     "reasoning": proposal["reasoning"], "warning": warning}, "placement_validated": True}
 

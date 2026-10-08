@@ -5,6 +5,7 @@ import { test, before, beforeEach, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import React from "react";
+import { readFileSync } from "node:fs";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://unit.test/",
@@ -20,6 +21,7 @@ for (const key of [
   "SVGElement",
   "Element",
   "Node",
+  "NodeFilter",
   "Event",
   "MouseEvent",
   "MutationObserver",
@@ -517,4 +519,47 @@ test("the last area and required reception cannot be deleted", () => {
   );
   assert.ok(marker("reception"));
   assertAllContained();
+});
+
+test("Generate design displays the returned smaller building and keeps its result", async () => {
+  // Explicit API double: source/response assertions are covered by backend and
+  // live Ollama tests. Here we verify actual React request and rendering behavior.
+  const layout = JSON.parse(readFileSync(new URL("../../shared/fixtures/network-hotel.json", import.meta.url), "utf8"));
+  layout.rooms = [layout.rooms[0], layout.rooms[1], layout.rooms.find((r: any) => r.type === "bathroom"), layout.rooms.find((r: any) => r.type === "lobby")];
+  const ids = new Set(layout.rooms.map((r: any) => r.id));
+  layout.devices = layout.devices.filter((d: any) => ids.has(d.room_id));
+  const lobby = layout.rooms.find((r: any) => r.type === "lobby");
+  layout.reception.x = lobby.x + lobby.width * .75;
+  layout.reception.y = lobby.y + lobby.height / 2;
+  globalThis.fetch = async (url: any, init?: any) => {
+    requests.push({url: String(url), body: JSON.parse(init.body)});
+    return new Response(JSON.stringify({status: "ok", layout, simulation: unitResult,
+      planner: {source: "deterministic_fallback", reasoning: "Explicit unit-test response"},
+      design_request: {mode: "new_layout", matched: true}}), {status: 200});
+  };
+  fireEvent.click(screen.getByRole("button", {name: "Plan deployment"}));
+  fireEvent.change(screen.getByLabelText("Layout and monitoring requirements"), {
+    target: {value: "2 rooms, 1 bathroom, 1 lobby, 1 gateway"},
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", {name: "Generate design"}));
+  });
+  assert.equal(document.querySelectorAll('[data-testid^="room-"]').length, 4);
+  assert.equal(document.querySelectorAll('[data-device-id^="temp_"]').length, 2);
+  assert.equal(document.querySelectorAll('[data-device-id^="leak_"]').length, 1);
+  assert.equal(requests.at(-1)!.body.prompt, "2 rooms, 1 bathroom, 1 lobby, 1 gateway");
+  assert.ok(screen.getByText("Requested area counts matched · network simulated by C++."));
+  assertAllContained();
+});
+
+test("failed design retains current building and shows the backend count error", async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({status: "error",
+    error: {code: "INVALID_INPUT", message: "This single-floor MVP supports one or two gateways"}}), {status: 422});
+  fireEvent.click(screen.getByRole("button", {name: "Plan deployment"}));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", {name: "Generate design"}));
+  });
+  assert.equal(document.querySelectorAll('[data-testid^="room-"]').length, 8);
+  assert.ok(screen.getAllByText("This single-floor MVP supports one or two gateways").length);
+  assert.ok(screen.getByText("Request failed · previous deployment retained."));
 });

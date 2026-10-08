@@ -21,4 +21,4 @@ export type Result = {
   heatmap?: { columns: number; rows: number; cell_width: number; cell_height: number; width: number; height: number; cells: { x: number; y: number; rssi_dbm: number | null; reachable: boolean; gateway_id: string | null }[] };
 };
 export type Planner = { source: string; model?: string | null; reasoning: string; warning?: string | null };
-export type ScenarioResult = { status: string; layout: Layout; simulation?: Result; before?: Result; after?: Result; improved?: boolean; recovered?: boolean; planner: Planner; error?: { code: string; message: string } };
+export type ScenarioResult = { status: string; layout: Layout; simulation?: Result; before?: Result; after?: Result; improved?: boolean; recovered?: boolean; planner: Planner; design_request?: { mode: "new_layout" | "existing_layout"; requested_counts: Partial<Record<RoomKind | "gateways", number>>; actual_counts: Record<RoomKind | "gateways", number>; matched: boolean }; error?: { code: string; message: string } };

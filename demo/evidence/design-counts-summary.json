@@ -1,0 +1,119 @@
+{
+  "date": "2026-10-08",
+  "checkpoint": "CP10 regression fix",
+  "status": "COMPONENT PASSED; shared/browser acceptance pending",
+  "transport": "FastAPI TestClient (current source)",
+  "backend_tests": "47/47 passed",
+  "frontend_tests": "39/39 passed",
+  "cpp_debug_ctest": "3/3 passed",
+  "cpp_release_ctest": "3/3 passed",
+  "production_build": "TypeScript/Vite passed; runtime ZIP refreshed",
+  "cases": [
+    {
+      "prompt": "simple 2 rooms, 1 bathroom, 1 lobby, 1 gateway, clean design",
+      "seconds": 3.234,
+      "counts": {
+        "room": 2,
+        "bathroom": 1,
+        "lobby": 1,
+        "reception": 0,
+        "gateways": 1
+      },
+      "sensors": 3,
+      "planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "reasoning": "Place the gateway centrally in the lobby to ensure optimal coverage and reliability for the entire building layout, including guest rooms, bathrooms, and the lobby itself. This placement maximizes the Requested area counts were used to build a rectangular layout with drywall boundaries.",
+        "warning": null
+      },
+      "summary": {
+        "average_latency_ms": 85.546875,
+        "coverage": 0.6666666666666666,
+        "delivered_messages": 384,
+        "generated_messages": 600,
+        "lost_messages": 216,
+        "reachable_devices": 2,
+        "reliability": 0.64,
+        "total_devices": 3,
+        "worst_latency_ms": null
+      },
+      "requirements_pass": false,
+      "independently_repeated_cpp_output_equal": true
+    },
+    {
+      "prompt": "Design three guest rooms, one bathroom, one lobby, and two gateways.",
+      "seconds": 1.75,
+      "counts": {
+        "room": 3,
+        "bathroom": 1,
+        "lobby": 1,
+        "reception": 0,
+        "gateways": 2
+      },
+      "sensors": 4,
+      "planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "reasoning": "Placed two gateways in the centre of the building to ensure comprehensive coverage and minimal latency, adhering to the user's requirements for reliability and coverage. The layout respects the user's Requested area counts were used to build a rectangular layout with drywall boundaries.",
+        "warning": null
+      },
+      "summary": {
+        "average_latency_ms": 81.55019059720458,
+        "coverage": 1.0,
+        "delivered_messages": 787,
+        "generated_messages": 800,
+        "lost_messages": 13,
+        "reachable_devices": 4,
+        "reliability": 0.98375,
+        "total_devices": 4,
+        "worst_latency_ms": 310.0
+      },
+      "requirements_pass": true,
+      "independently_repeated_cpp_output_equal": true
+    },
+    {
+      "prompt": "simple 2 rooms, 1 bathroom, 1 lobby, 1 gateway, clean design",
+      "seconds": 1.375,
+      "counts": {
+        "room": 2,
+        "bathroom": 1,
+        "lobby": 1,
+        "reception": 0,
+        "gateways": 1
+      },
+      "sensors": 3,
+      "planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "reasoning": "Place the gateway centrally in the lobby to ensure comprehensive coverage and minimal latency for all devices, including temperature and leak sensors, while maintaining high reliability and coverage.  Requested area counts were used to build a rectangular layout with drywall boundaries.",
+        "warning": null
+      },
+      "summary": {
+        "average_latency_ms": 85.546875,
+        "coverage": 0.6666666666666666,
+        "delivered_messages": 384,
+        "generated_messages": 600,
+        "lost_messages": 216,
+        "reachable_devices": 2,
+        "reliability": 0.64,
+        "total_devices": 3,
+        "worst_latency_ms": null
+      },
+      "requirements_pass": false,
+      "independently_repeated_cpp_output_equal": true
+    }
+  ],
+  "unsupported_gateway_request": {
+    "schema_version": "1.0",
+    "status": "error",
+    "error": {
+      "code": "INVALID_INPUT",
+      "message": "This single-floor MVP supports one or two gateways"
+    }
+  },
+  "schema": "1.0 unchanged; additive backend design_request envelope",
+  "browser_visual_verified": false,
+  "user_running_backend": "Left running; restart root launcher to load new Python source",
+  "ready_for_shared_acceptance": false,
+  "runtime_archive_sha256": "b51c5028bc28e14571830c5d57b515020d0b62a1fffcf8c2f35185b23a1fa917"
+}
