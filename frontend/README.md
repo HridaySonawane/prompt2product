@@ -1,36 +1,16 @@
 # IoTForge frontend
 
-This checkout currently runs the browser UI with Next.js. It sends complete
-schema 1.0 layout JSON to the FastAPI service and displays geometry links and
-structured backend errors. The API returns geometry only for CP00–02; the UI
-does not present coverage, reliability, latency, or requirement results as
-simulated values.
+React + TypeScript + Vite. The user-approved final stack replaces the previous Next/Turbopack configuration, whose production build failed in this environment.
 
-## Run locally
+From this folder: `npm ci`, `npm run build`, then `npm run dev` (port 3000).
+The Vite dev/preview server proxies `/api` to FastAPI on 127.0.0.1:8000.
+`npm run lint` runs strict TypeScript checks; the production build checks types too.
 
-Start the C++ simulator build and FastAPI service first. The full Windows
-startup steps and service responsibilities are in the [repository README](../README.md).
+For the production demo, build once, then run FastAPI from the repository root:
+`backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000`.
+Open http://127.0.0.1:8000 — FastAPI serves `dist/` and the APIs together.
+Optional `VITE_IOTFORGE_API_URL` changes the API origin at build time.
 
-Then, from this directory:
-
-```bat
-npm ci
-npm run dev
-```
-
-Open `http://localhost:3000`. The default API URL is
-`http://127.0.0.1:8000`. Override it before starting Next.js with
-`NEXT_PUBLIC_IOTFORGE_API_URL` if FastAPI uses another address. The backend must
-allow the frontend origin in `IOTFORGE_CORS_ORIGINS`.
-
-The status indicator checks `GET /api/health`; a successful health response
-means FastAPI is reachable and reports whether the simulator executable file
-exists. It does not itself prove a successful simulation. Use **Simulate layout**
-to run a real request through FastAPI and C++.
-
-## Framework note
-
-The approved product scope names Vite, while this checkout and its repository
-instructions currently use Next.js. This integration keeps the current
-framework; resolve that scope mismatch with the team before making a
-framework-level change.
+Metrics and PASS/FAIL come from C++; edits clear old results. The layout editor
+supports rooms, sensors, gateways, walls, requirements and schema 1.0 import/export.
+See the root README for the final complete demo and simulation assumptions.

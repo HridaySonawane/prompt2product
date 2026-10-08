@@ -1,11 +1,12 @@
-"""CP00-02 HTTP adapter. C++ is the only source of geometry results."""
+"""HTTP adapter. C++ is the only source of simulation metrics."""
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from .config import Settings
+from .config import PROJECT_ROOT, Settings
 from .contract import INPUT_VALIDATOR, error_response, load_json, validation_message
 from .simulator import SimulatorError, SimulatorRunner
 
@@ -13,7 +14,7 @@ from .simulator import SimulatorError, SimulatorRunner
 def create_app(settings=None):
     settings = settings or Settings.from_env()
     runner = SimulatorRunner(settings)
-    app = FastAPI(title="IoTForge geometry API", version="0.2.0")
+    app = FastAPI(title="IoTForge simulation API", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
@@ -24,7 +25,7 @@ def create_app(settings=None):
     @app.get("/api/health")
     def health():
         # Liveness plus file readiness; this does not claim a successful simulation.
-        return {"status": "ok", "schema_version": "1.0", "checkpoint": "02",
+        return {"status": "ok", "schema_version": "1.0", "checkpoint": "05",
                 "simulator_available": settings.simulator_path.is_file()}
 
     @app.post("/api/simulate", openapi_extra={
@@ -51,6 +52,9 @@ def create_app(settings=None):
         except SimulatorError as exc:
             return JSONResponse(exc.response, status_code=exc.http_status)
 
+    frontend_dist = PROJECT_ROOT / "frontend" / "dist"
+    if frontend_dist.is_dir():
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
     return app
 
 
