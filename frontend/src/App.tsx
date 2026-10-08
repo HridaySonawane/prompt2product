@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import hotel from "../../shared/fixtures/network-hotel.json";
 import weakHotel from "../../shared/fixtures/weak-signal.json";
-import type { Layout, Result, Room, RoomKind, Sensor, Wall } from "./models";
+import type { Layout, Result, Room, RoomKind, Sensor, Wall, Planner, ScenarioResult } from "./models";
 
 const api = import.meta.env.VITE_IOTFORGE_API_URL ?? "";
 const copy = <T,>(value: T): T => structuredClone(value);
@@ -21,6 +21,12 @@ export default function App() {
   const [notice, setNotice] = useState("Edit the floor plan, then simulate your deployment.");
   const [showJson, setShowJson] = useState(false);
   const [jsonText, setJsonText] = useState("");
+  const [prompt, setPrompt] = useState("Monitor temperature in all five rooms, detect bathroom leaks, and deliver alerts to reception within two seconds with at least 95% reliability.");
+  const [aiStatus, setAiStatus] = useState("Checking local AI…");
+  const [planner, setPlanner] = useState<Planner | null>(null);
+  const [comparison, setComparison] = useState<{ before: Result; after: Result; label: string; improved?: boolean } | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [failureId, setFailureId] = useState("gateway_1");
   const svg = useRef<SVGSVGElement>(null);
   const room = layout.rooms.find(item => item.id === selected);
   const device = layout.devices.find(item => item.id === selected);
@@ -31,19 +37,26 @@ export default function App() {
     fetch(`${api}/api/health`).then(response => response.json()).then(data => {
       if (active) setHealth(data.simulator_available ? "C++ engine ready" : "Build simulator first");
     }).catch(() => { if (active) setHealth("Backend offline"); });
+    fetch(`${api}/api/ai/health`).then(response => response.json()).then(data => {
+      if (active) setAiStatus(data.available ? `Local AI · ${data.model}` : "AI unavailable · labeled fallback available");
+    }).catch(() => { if (active) setAiStatus("AI unavailable · manual simulation works"); });
     return () => { active = false; };
   }, []);
 
   function edit(change: (draft: Layout) => void) {
+    if (busy) return;
     setLayout(previous => { const next = copy(previous); change(next); return next; });
-    setResult(null); setError(""); setNotice("Layout changed · simulate to refresh results.");
+    setResult(null); setComparison(null); setPlanner(null); setError(""); setNotice("Layout changed · simulate to refresh results.");
   }
   function load(value: Layout) {
     setLayout(copy(value)); setResult(null); setError(""); setSelected(value.rooms[0]?.id ?? "");
+    setComparison(null); setPlanner(null); setFailureId(value.gateways[0]?.id ?? "");
     setNotice("Example loaded · results will be calculated when you simulate.");
   }
   function updateRoom(patch: Partial<Room>) {
     if (!room) return;
+    if (patch.width !== undefined) patch.width = Math.max(1, patch.width);
+    if (patch.height !== undefined) patch.height = Math.max(1, patch.height);
     edit(draft => {
       const target = draft.rooms.find(item => item.id === room.id)!;
       const old = { ...target }; Object.assign(target, patch);
@@ -105,12 +118,34 @@ export default function App() {
     } catch (cause) { setResult(null); setError(cause instanceof Error ? cause.message : "Simulation failed"); }
     finally { setBusy(false); }
   }
-  function importJson() {
+  async function scenario(operation: "design" | "optimize" | "failure", backup = false) {
+    setBusy(true); setError("");
+    setNotice(operation === "design" ? "Local AI is interpreting your requirements; C++ will verify the design…" : operation === "optimize" ? "Evaluating placement proposals against actual C++ diagnostics…" : backup ? "Testing backup placement and reassociation with C++…" : "Disabling the gateway and recalculating every sensor…");
+    try {
+      const id = layout.gateways.find(item => item.id === failureId)?.id ?? layout.gateways[0]?.id;
+      const body = operation === "failure" ? { layout, gateway_id: id, add_backup: backup } : { layout, prompt };
+      const response = await fetch(`${api}/api/${operation}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(180000) });
+      const value = await response.json() as ScenarioResult;
+      if (!response.ok || value.status !== "ok") throw new Error(value.error?.message ?? `HTTP ${response.status}`);
+      const nextResult = value.simulation ?? value.after;
+      if (!nextResult) throw new Error("Simulation result missing from response");
+      setLayout(value.layout); setResult(nextResult); setPlanner(value.planner); setSelected(value.layout.gateways.find(item => item.active)?.id ?? value.layout.gateways[0]?.id ?? ""); setTab("devices");
+      setComparison(value.before && value.after ? { before: value.before, after: value.after, label: operation === "optimize" ? "Placement optimization" : backup ? "Backup recovery" : "Gateway failure", improved: value.improved } : null);
+      setNotice(operation === "design" ? "Design placed and verified by C++." : operation === "optimize" ? value.improved ? "Verified improvement · compare the real runs below." : "No verified improvement found · previous placement retained." : backup ? value.recovered ? "Backup restored the original requirements." : "Backup tested · requirements still fail. Inspect sensor diagnostics." : "Gateway offline · failure impact calculated by C++.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Request failed"); setNotice("Request failed · previous deployment retained."); }
+    finally { setBusy(false); }
+  }
+  async function importJson() {
+    setBusy(true); setError("");
     try { const value = JSON.parse(jsonText) as Layout;
       if (value.schema_version !== "1.0" || !Array.isArray(value.rooms) || !Array.isArray(value.devices) || !Array.isArray(value.gateways) || !Array.isArray(value.walls) || !value.floor || !value.requirements || !value.reception) throw new Error("Expected a complete schema 1.0 layout.");
       value.simulation ??= { metres_per_unit: 0.05, seed: 1337, packets_per_device: 200 };
-      load(value); setShowJson(false);
+      const response = await fetch(`${api}/api/simulate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value), signal: AbortSignal.timeout(20000) });
+      const validated = await response.json() as Result;
+      if (!response.ok || validated.status !== "ok") throw new Error(validated.error?.message ?? "Invalid layout");
+      load(value); setResult(validated); setShowJson(false); setNotice("Imported layout validated and simulated by C++.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Invalid JSON"); }
+    finally { setBusy(false); }
   }
 
   return <div className="application">
@@ -123,12 +158,15 @@ export default function App() {
         <Metric title="WORST LATENCY" value={result ? latency(result.summary.worst_latency_ms) : "—"} detail={`Target ≤ ${layout.requirements.max_latency_ms} ms · includes retries`}/>
         <Metric title="REQUIREMENT STATUS" value={result ? (result.requirements_evaluation.pass ? "PASS" : "FAIL") : "Not simulated"} detail={result ? "Evaluated independently by C++" : "No estimated placeholder metrics"} state={result ? result.requirements_evaluation.pass ? "pass" : "fail" : ""}/>
       </div>
+      <section className="planning-panel"><div className="planning-intro"><span className="eyebrow">LOCAL AI / INDEPENDENT VERIFICATION</span><h2>A plan starts with a requirement.</h2><p>{aiStatus}</p></div><div className="planning-input"><label htmlFor="requirements-prompt">Describe what you need to monitor</label><textarea id="requirements-prompt" maxLength={4000} disabled={busy} value={prompt} onChange={event => setPrompt(event.target.value)}/><div className="planning-actions"><span>AI proposes. C++ decides whether it works.</span><button className="button subtle" disabled={busy || !layout.gateways.some(item => item.active)} onClick={() => void scenario("optimize")}>↗ Optimize placement</button><button className="button primary" disabled={busy || !prompt.trim()} onClick={() => void scenario("design")}>✧ Generate design</button></div></div></section>
+      {planner && <div className={`planner-note ${planner.source !== "ollama" ? "fallback" : ""}`} role="status"><b>{planner.source === "ollama" ? `Ollama · ${planner.model}` : planner.source === "deterministic_fallback" ? "Rule-based fallback · not AI" : "C++ verified scenario"}</b><span>{planner.reasoning}</span>{planner.warning && <small>{planner.warning}</small>}</div>}
       <div className="workspace">
         <section className="panel floor-panel"><div className="panel-heading"><div><span className="eyebrow">01 / FLOOR PLAN</span><h2>Hotel deployment</h2></div><span className="pill">{layout.floor.width * layout.simulation.metres_per_unit} × {layout.floor.height * layout.simulation.metres_per_unit} m</span></div>
-          <div className="canvas-toolbar"><span>◉ {layout.rooms.length} areas <b>·</b> {layout.devices.length} sensors <b>·</b> {layout.gateways.length}/2 gateways</span><span>Click to select · drag devices to move</span></div>
-          <svg ref={svg} className="floor-plan" viewBox={`0 0 ${layout.floor.width} ${layout.floor.height}`} aria-label="Editable hotel floor plan">
+          <div className="canvas-toolbar"><span>◉ {layout.rooms.length} areas <b>·</b> {layout.devices.length} sensors <b>·</b> {layout.gateways.length}/2 gateways</span><label className="heatmap-toggle"><input type="checkbox" checked={showHeatmap} onChange={event => setShowHeatmap(event.target.checked)}/>Signal heatmap</label></div>
+          <svg ref={svg} className={`floor-plan ${showHeatmap && result ? "heatmap-visible" : ""}`} viewBox={`0 0 ${layout.floor.width} ${layout.floor.height}`} aria-label="Editable hotel floor plan">
             <defs><pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M 25 0 L 0 0 0 25" fill="none" stroke="#e1e8ef" strokeWidth="1"/></pattern></defs>
             <rect width={layout.floor.width} height={layout.floor.height} fill="#f7f9fc"/><rect width={layout.floor.width} height={layout.floor.height} fill="url(#grid)"/>
+            {showHeatmap && result?.heatmap && <g aria-hidden="true" className="heatmap-cells">{result.heatmap.cells.map(cell => <rect key={`${cell.x}-${cell.y}`} x={cell.x} y={cell.y} width={result.heatmap!.cell_width} height={result.heatmap!.cell_height} fill={cell.rssi_dbm === null ? "#c8cdd6" : cell.rssi_dbm < result.model.sensitivity_dbm ? "#ee8c83" : `hsl(${Math.max(30, Math.min(155, 30 + (cell.rssi_dbm - result.model.sensitivity_dbm) * 5))}, 55%, 66%)`} opacity=".4"><title>{cell.rssi_dbm === null ? "No active gateway" : `${cell.rssi_dbm.toFixed(1)} dBm · ${cell.reachable ? "reachable" : "below sensitivity"}`}</title></rect>)}</g>}
             {layout.rooms.map(item => <g key={item.id} className="room" onClick={() => { setSelected(item.id); setTab("rooms"); }}><rect x={item.x} y={item.y} width={item.width} height={item.height} rx="6" className={`room-${item.type} ${selected === item.id ? "selected" : ""}`}/><text x={item.x + 13} y={item.y + 26} className="room-label">{item.name}</text><text x={item.x + 13} y={item.y + 45} className="room-kind">{item.type.toUpperCase()}</text></g>)}
             {result?.geometry.links.map(link => { const source = layout.devices.find(item => item.id === link.source); const destination = layout.gateways.find(item => item.id === link.destination); const chosen = result.devices.find(item => item.device_id === link.source)?.gateway_id === link.destination;
               return source && destination ? <line key={`${link.source}-${link.destination}`} x1={source.x} y1={source.y} x2={destination.x} y2={destination.y} className={`network-link ${link.reachable ? chosen ? "connected" : "standby" : "disconnected"}`}><title>{link.source} → {link.destination}: {link.rssi_dbm.toFixed(1)} dBm, {link.walls_crossed} walls</title></line> : null; })}
@@ -139,6 +177,7 @@ export default function App() {
             {layout.gateways.map((item, index) => <g key={item.id} className="marker" role="button" tabIndex={0} aria-label={`Select ${item.id}`} onKeyDown={event => { if (event.key === "Enter") { setSelected(item.id); setTab("devices"); } }} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setSelected(item.id); setTab("devices"); }} onPointerMove={event => drag(event, item.id, "gateway")} onPointerUp={event => event.currentTarget.releasePointerCapture(event.pointerId)}><rect x={item.x - 20} y={item.y - 20} width="40" height="40" rx="10" className={`gateway ${!item.active ? "offline" : ""} ${selected === item.id ? "selected-marker" : ""}`}/><text x={item.x} y={item.y + 5} textAnchor="middle" className="marker-letter">G{index + 1}</text><text className="marker-caption" x={item.x} y={item.y + 37} textAnchor="middle">{item.active ? "ONLINE" : "OFFLINE"}</text></g>)}
           </svg>
           <div className="legend"><span><i className="dot temperature"/>Temperature</span><span><i className="dot leak"/>Water leak</span><span><i className="dot gateway"/>Gateway</span><span><i className="line connected"/>Connected</span><span><i className="line disconnected"/>Unavailable</span></div>
+          {result?.heatmap && showHeatmap && <div className="heatmap-key"><span className="gradient"/><span>Below sensitivity → weak → strong</span><span>{result.heatmap.columns} × {result.heatmap.rows} C++ samples · cell centres</span></div>}
           <div className="notice" role="status">{notice}</div>
         </section>
         <aside className="panel inspector"><div className="panel-heading"><div><span className="eyebrow">02 / BUILD YOUR SCENARIO</span><h2>Layout inspector</h2></div><span className="pill">SCHEMA 1.0</span></div>
@@ -158,11 +197,13 @@ export default function App() {
           </fieldset>
         </aside>
       </div>
+      <section className="panel resilience-panel"><div><span className="eyebrow">RESILIENCE / BREAK IT, THEN TEST RECOVERY</span><h2>What if a gateway goes offline?</h2><p>Recalculate affected sensors, then test a backup against the same requirements.</p></div><div className="resilience-controls"><select aria-label="Gateway to fail" disabled={busy} value={layout.gateways.some(item => item.id === failureId) ? failureId : layout.gateways[0]?.id ?? ""} onChange={event => setFailureId(event.target.value)}>{layout.gateways.map(item => <option key={item.id} value={item.id}>{item.id} · {item.active ? "online" : "offline"}</option>)}</select><button className="button fail-button" disabled={busy || !layout.gateways.length} onClick={() => void scenario("failure")}>⏻ Fail gateway</button><button className="button subtle" disabled={busy || layout.gateways.length >= 2 || !layout.gateways.some(item => !item.active)} onClick={() => void scenario("failure", true)}>＋ Test backup recovery</button></div></section>
       {error && <div className="error" role="alert"><b>Unable to complete request.</b> {error}</div>}
+      {comparison && <section className="panel comparison"><div className="panel-heading"><div><span className="eyebrow">TWO REAL SIMULATION RUNS</span><h2>{comparison.label}</h2></div>{comparison.improved !== undefined && <span className="pill">{comparison.improved ? "VERIFIED IMPROVEMENT" : "NO IMPROVEMENT"}</span>}</div><div className="table-scroll"><table><thead><tr><th>Run</th><th>Coverage</th><th>Reliability</th><th>Worst latency</th><th>Requirements</th></tr></thead><tbody>{(["before", "after"] as const).map(key => <tr key={key}><td><b>{key === "before" ? "Before" : "After"}</b></td><td>{percent(comparison[key].summary.coverage)}</td><td>{percent(comparison[key].summary.reliability)}</td><td>{latency(comparison[key].summary.worst_latency_ms)}</td><td className={comparison[key].requirements_evaluation.pass ? "status-pass" : "status-fail"}>{comparison[key].requirements_evaluation.pass ? "PASS" : "FAIL"}</td></tr>)}</tbody></table></div></section>}
       <section className="panel result-panel"><div className="panel-heading"><div><span className="eyebrow">03 / SIMULATOR RESULTS</span><h2>Every sensor, accounted for.</h2></div><span className="pill">REAL C++ OUTPUT</span></div>
         {!result ? <div className="empty"><span>⌁</span><h3>Your next run starts here.</h3><p>Simulation results appear after you run the current layout.</p></div> : <><div className="checks">{Object.entries(result.requirements_evaluation.checks).map(([name, passed]) => <span key={name} className={passed ? "pass" : "fail"}>{passed ? "✓" : "×"} {name}</span>)}</div>{result.requirements_evaluation.diagnostics.length > 0 && <div className="diagnostics">{result.requirements_evaluation.diagnostics.map(item => <p key={item}>• {item}</p>)}</div>}<div className="table-scroll"><table><thead><tr><th>Sensor</th><th>Selected gateway</th><th>Signal</th><th>Delivery</th><th>Reliability</th><th>Worst latency</th></tr></thead><tbody>{result.devices.map(item => <tr key={item.device_id}><td><b>{item.device_id}</b><small>{layout.rooms.find(area => area.id === layout.devices.find(sensor => sensor.id === item.device_id)?.room_id)?.name}</small></td><td>{item.gateway_id ?? "No reachable gateway"}</td><td>{item.rssi_dbm === null ? "—" : `${item.rssi_dbm.toFixed(1)} dBm`}</td><td>{item.delivered_messages} / {item.generated_messages}</td><td>{percent(item.reliability)}</td><td>{latency(item.worst_latency_ms)}</td></tr>)}</tbody></table></div><details className="geometry-detail"><summary>Inspect all {result.geometry.links.length} device-to-gateway links</summary><div className="table-scroll"><table><thead><tr><th>Link</th><th>Distance</th><th>Walls</th><th>Wall loss</th><th>RSSI</th></tr></thead><tbody>{result.geometry.links.map(item => <tr key={`${item.source}-${item.destination}`}><td>{item.source} → {item.destination}</td><td>{item.distance_metres.toFixed(2)} m</td><td>{item.walls_crossed}</td><td>{item.wall_attenuation_db} dB</td><td>{item.rssi_dbm.toFixed(1)} dBm</td></tr>)}</tbody></table></div></details></>}
       </section>
-      <section className="json-controls"><button className="text-button" onClick={() => { setJsonText(JSON.stringify(layout, null, 2)); setShowJson(!showJson); }}>{showJson ? "Hide" : "Import / export"} schema 1.0 JSON</button>{showJson && <><textarea aria-label="Layout JSON" value={jsonText} onChange={event => setJsonText(event.target.value)}/><button className="button subtle" disabled={busy} onClick={importJson}>Load JSON into editor</button></>}</section>
+      <section className="json-controls"><button className="text-button" onClick={() => { setJsonText(JSON.stringify(layout, null, 2)); setShowJson(!showJson); }}>{showJson ? "Hide" : "Import / export"} schema 1.0 JSON</button>{showJson && <><textarea aria-label="Layout JSON" value={jsonText} onChange={event => setJsonText(event.target.value)}/><button className="button subtle" disabled={busy} onClick={() => void importJson()}>Validate & load JSON</button></>}</section>
       <footer><span><b>IoTForge</b> · Indoor deployment lab</span><span>Approximate engineering models. Validate installations with a real site survey.</span></footer>
     </main>
   </div>;

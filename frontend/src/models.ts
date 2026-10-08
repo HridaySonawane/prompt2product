@@ -17,4 +17,8 @@ export type Result = {
   devices: { device_id: string; gateway_id: string | null; reachable: boolean; rssi_dbm: number | null; delivered_messages: number; generated_messages: number; reliability: number; worst_latency_ms: number | null }[];
   requirements_evaluation: { pass: boolean; checks: Record<string, boolean>; diagnostics: string[] };
   error?: { code: string; message: string };
+  model: { sensitivity_dbm: number };
+  heatmap?: { columns: number; rows: number; cell_width: number; cell_height: number; width: number; height: number; cells: { x: number; y: number; rssi_dbm: number | null; reachable: boolean; gateway_id: string | null }[] };
 };
+export type Planner = { source: string; model?: string | null; reasoning: string; warning?: string | null };
+export type ScenarioResult = { status: string; layout: Layout; simulation?: Result; before?: Result; after?: Result; improved?: boolean; recovered?: boolean; planner: Planner; error?: { code: string; message: string } };

@@ -149,11 +149,29 @@ SimulationInput parse_input(const nlohmann::json& j) {
         config.seed = integer("seed", 0, 4294967295U, config.seed);
         config.packets_per_device = static_cast<int>(integer("packets_per_device", 1, 10000, 200));
         config.retries = static_cast<int>(integer("retries", 0, 10, 2));
+        config.heatmap_columns = static_cast<int>(integer("heatmap_columns", 1, 50, 20));
+        config.heatmap_rows = static_cast<int>(integer("heatmap_rows", 1, 50, 12));
     }
     std::unordered_set<std::string> room_ids;
     for (const auto& room : input.rooms) room_ids.insert(room.id);
     for (const auto& device : input.devices)
         if (!room_ids.contains(device.room_id)) invalid("$.devices", "unknown room_id '" + device.room_id + "'");
+    if (input.simulation.enabled) {
+        const auto inside_floor = [&](double x, double y) {
+            return x >= 0 && y >= 0 && x <= input.floor.width && y <= input.floor.height;
+        };
+        if (input.gateways.size() > 2) invalid("$.gateways", "MVP supports at most two gateways");
+        for (const auto& r : input.rooms)
+            if (!inside_floor(r.x, r.y) || !inside_floor(r.x + r.width, r.y + r.height))
+                invalid("$.rooms", "room must fit inside the floor: " + r.id);
+        for (const auto& d : input.devices)
+            if (!inside_floor(d.x, d.y)) invalid("$.devices", "device must be inside the floor: " + d.id);
+        for (const auto& g : input.gateways)
+            if (!inside_floor(g.x, g.y)) invalid("$.gateways", "gateway must be inside the floor: " + g.id);
+        for (const auto& w : input.walls)
+            if (!inside_floor(w.x1, w.y1) || !inside_floor(w.x2, w.y2)) invalid("$.walls", "wall must be inside the floor: " + w.id);
+        if (!inside_floor(input.reception.x, input.reception.y)) invalid("$.reception", "must be inside the floor");
+    }
     return input;
 }
 SimulationInput load_input(std::istream& stream) {
@@ -182,7 +200,8 @@ nlohmann::json serialize_input(const SimulationInput& in) {
             {"reference_loss_db", s.reference_loss_db}, {"path_loss_exponent", s.path_loss_exponent},
             {"sensitivity_dbm", s.sensitivity_dbm}, {"retries", s.retries},
             {"packet_airtime_ms", s.packet_airtime_ms}, {"retry_delay_ms", s.retry_delay_ms},
-            {"backhaul_latency_ms", s.backhaul_latency_ms}};
+            {"backhaul_latency_ms", s.backhaul_latency_ms},
+            {"heatmap_columns", s.heatmap_columns}, {"heatmap_rows", s.heatmap_rows}};
     }
     // Validate model values before exposing them as contract JSON.
     (void)parse_input(j);

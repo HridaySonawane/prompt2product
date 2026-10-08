@@ -100,6 +100,32 @@ Json evaluate_network(const SimulationInput& in, Json response) {
     response["model"] = {{"name", "log-distance + wall loss + seeded independent packet trials"},
         {"metres_per_unit", c.metres_per_unit}, {"seed", c.seed}, {"sensitivity_dbm", c.sensitivity_dbm},
         {"reception_backhaul", "assumed wired; fixed backhaul_latency_ms"}};
+    const double cell_width = in.floor.width / c.heatmap_columns;
+    const double cell_height = in.floor.height / c.heatmap_rows;
+    Json cells = Json::array();
+    for (int row = 0; row < c.heatmap_rows; ++row) {
+        for (int column = 0; column < c.heatmap_columns; ++column) {
+            Point point{(column + 0.5) * cell_width, (row + 0.5) * cell_height};
+            bool available = false;
+            double best_rssi = 0;
+            std::string best_gateway;
+            for (const auto& gateway : in.gateways) {
+                if (!gateway.active) continue;
+                const Point destination{gateway.x, gateway.y};
+                const double loss = total_wall_attenuation(point, destination, in.walls);
+                const double rssi = estimated_rssi(distance(point, destination), loss, c);
+                if (!available || rssi > best_rssi) { available = true; best_rssi = rssi; best_gateway = gateway.id; }
+            }
+            cells.push_back({{"x", column * cell_width}, {"y", row * cell_height},
+                {"rssi_dbm", available ? Json(best_rssi) : Json(nullptr)},
+                {"gateway_id", available ? Json(best_gateway) : Json(nullptr)},
+                {"reachable", available && best_rssi >= c.sensitivity_dbm}});
+        }
+    }
+    response["heatmap"] = {{"columns", c.heatmap_columns}, {"rows", c.heatmap_rows},
+        {"width", in.floor.width}, {"height", in.floor.height},
+        {"cell_width", cell_width}, {"cell_height", cell_height},
+        {"sampling", "cell centre; strongest active gateway; shared radio model"}, {"cells", cells}};
     return response;
 }
 }

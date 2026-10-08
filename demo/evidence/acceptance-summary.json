@@ -1,0 +1,140 @@
+{
+  "date": "2026-10-08",
+  "environment": "Windows x64, MSVC 19.44 NMake Debug/Release, Python 3.11, Node 22, Vite 7.3.7",
+  "cpp_ctest_debug": "3/3 passed",
+  "cpp_ctest_release": "3/3 passed",
+  "cpp_geometry_contract_checks": 123,
+  "cpp_network_grid_checks": 25,
+  "backend_tests": "30/30 passed",
+  "frontend_build": "passed",
+  "npm_audit_vulnerabilities": 0,
+  "http_checks": "8/8 passed",
+  "ai": {
+    "schema_version": "1.0",
+    "status": "ok",
+    "available": true,
+    "model": "qwen2.5:1.5b",
+    "message": "Local AI ready"
+  },
+  "extracted_runtime_cold_start": "passed",
+  "workflows": [
+    {
+      "design_planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "reasoning": "Place the gateway centrally to ensure coverage and reliability across all monitored areas.",
+        "warning": null
+      },
+      "optimization_planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "warning": null,
+        "reasoning": "Moved the gateway closer to the sensor cluster, avoiding concrete barriers. This position maintains the sensor centroid while improving coverage and reliability."
+      },
+      "weak_before": {
+        "average_latency_ms": null,
+        "coverage": 0.0,
+        "delivered_messages": 0,
+        "generated_messages": 1200,
+        "lost_messages": 1200,
+        "reachable_devices": 0,
+        "reliability": 0.0,
+        "total_devices": 6,
+        "worst_latency_ms": null
+      },
+      "optimized_after": {
+        "average_latency_ms": 55.85,
+        "coverage": 1.0,
+        "delivered_messages": 1200,
+        "generated_messages": 1200,
+        "lost_messages": 0,
+        "reachable_devices": 6,
+        "reliability": 1.0,
+        "total_devices": 6,
+        "worst_latency_ms": 310.0
+      },
+      "failure": {
+        "average_latency_ms": null,
+        "coverage": 0.0,
+        "delivered_messages": 0,
+        "generated_messages": 1200,
+        "lost_messages": 1200,
+        "reachable_devices": 0,
+        "reliability": 0.0,
+        "total_devices": 6,
+        "worst_latency_ms": null
+      },
+      "recovery": {
+        "average_latency_ms": 54.225,
+        "coverage": 1.0,
+        "delivered_messages": 1200,
+        "generated_messages": 1200,
+        "lost_messages": 0,
+        "reachable_devices": 6,
+        "reliability": 1.0,
+        "total_devices": 6,
+        "worst_latency_ms": 310.0
+      },
+      "recovered": true
+    },
+    {
+      "design_planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "reasoning": "Place the gateway centrally to ensure coverage and reliability across all monitored areas.",
+        "warning": null
+      },
+      "optimization_planner": {
+        "source": "ollama",
+        "model": "qwen2.5:1.5b",
+        "warning": null,
+        "reasoning": "Moved the gateway closer to the sensor cluster, avoiding concrete barriers. This position maintains the sensor centroid while improving coverage and reliability."
+      },
+      "weak_before": {
+        "average_latency_ms": null,
+        "coverage": 0.0,
+        "delivered_messages": 0,
+        "generated_messages": 1200,
+        "lost_messages": 1200,
+        "reachable_devices": 0,
+        "reliability": 0.0,
+        "total_devices": 6,
+        "worst_latency_ms": null
+      },
+      "optimized_after": {
+        "average_latency_ms": 55.85,
+        "coverage": 1.0,
+        "delivered_messages": 1200,
+        "generated_messages": 1200,
+        "lost_messages": 0,
+        "reachable_devices": 6,
+        "reliability": 1.0,
+        "total_devices": 6,
+        "worst_latency_ms": 310.0
+      },
+      "failure": {
+        "average_latency_ms": null,
+        "coverage": 0.0,
+        "delivered_messages": 0,
+        "generated_messages": 1200,
+        "lost_messages": 1200,
+        "reachable_devices": 0,
+        "reliability": 0.0,
+        "total_devices": 6,
+        "worst_latency_ms": null
+      },
+      "recovery": {
+        "average_latency_ms": 54.225,
+        "coverage": 1.0,
+        "delivered_messages": 1200,
+        "generated_messages": 1200,
+        "lost_messages": 0,
+        "reachable_devices": 6,
+        "reliability": 1.0,
+        "total_devices": 6,
+        "worst_latency_ms": 310.0
+      },
+      "recovered": true
+    }
+  ]
+}

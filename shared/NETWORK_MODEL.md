@@ -57,3 +57,23 @@ backend\.venv\Scripts\python.exe -m unittest discover -s backend\tests -v
 
 This document defines the final-scope extension; it does not declare shared
 checkpoint acceptance without frontend/backend integration evidence.
+
+## Heatmap and placement extension (CP06–09)
+
+Network responses now add a row-major signal grid. `heatmap_columns` and
+`heatmap_rows` default to 20×12 and are bounded at 50×50. Each cell reports its
+top-left logical coordinates and centre-sampled strongest **active** gateway
+RSSI using the same wall crossings, metre conversion and loss equation as links.
+No active gateway means RSSI/gateway_id null and reachable false. Cell dimensions
+and floor extents are explicitly returned. This is a signal estimate, not a packet
+reliability grid; weak cells can differ from device positions within the same cell.
+
+Network inputs enforce floor bounds for areas, wall endpoints, devices, gateways
+and reception, plus a maximum of two gateways. Geometry-only legacy requests
+retain their original behavior. AI candidate sensors must additionally be inside
+their assigned room; backend validation checks this and C++ monitoring checks
+prevent a misleading PASS when required sensors are misplaced or missing.
+
+AI/backend envelopes and provenance are documented in API.md. A gateway failure
+uses the unchanged active boolean. C++ re-evaluates links, selected gateways,
+packet delivery, requirements and grid; an offline gateway never carries traffic.

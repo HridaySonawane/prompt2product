@@ -47,6 +47,8 @@ struct SimulationConfig {
     double packet_airtime_ms = 30;
     double retry_delay_ms = 100;
     double backhaul_latency_ms = 20;
+    int heatmap_columns = 20;
+    int heatmap_rows = 12;
 };
 struct SimulationInput {
     std::string schema_version;

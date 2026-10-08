@@ -110,6 +110,16 @@
           "type": "number",
           "minimum": 0,
           "maximum": 60000
+        },
+        "heatmap_columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "heatmap_rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
         }
       }
     }

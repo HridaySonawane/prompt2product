@@ -18,10 +18,15 @@ class Settings:
     simulator_path: Path
     timeout_seconds: float = 10.0
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:1.5b"
+    ai_timeout_seconds: float = 120.0
 
     def __post_init__(self):
         if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
             raise ValueError("IOTFORGE_SIMULATOR_TIMEOUT must be a positive finite number")
+        if not math.isfinite(self.ai_timeout_seconds) or self.ai_timeout_seconds <= 0:
+            raise ValueError("IOTFORGE_AI_TIMEOUT must be a positive finite number")
 
     @classmethod
     def from_env(cls):
@@ -35,4 +40,7 @@ class Settings:
             timeout_seconds=float(os.environ.get("IOTFORGE_SIMULATOR_TIMEOUT", "10")),
             cors_origins=tuple(item.strip() for item in origins.split(",") if item.strip())
             if origins is not None else DEFAULT_CORS_ORIGINS,
+            ollama_url=os.environ.get("IOTFORGE_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/"),
+            ollama_model=os.environ.get("IOTFORGE_OLLAMA_MODEL", "qwen2.5:1.5b"),
+            ai_timeout_seconds=float(os.environ.get("IOTFORGE_AI_TIMEOUT", "120")),
         )
