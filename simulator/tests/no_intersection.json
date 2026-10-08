@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "floor": {
+    "width": 1000,
+    "height": 600
+  },
+  "rooms": [
+    {
+      "y": 0,
+      "x": 0,
+      "height": 600,
+      "type": "room",
+      "name": "Room 101",
+      "width": 1000,
+      "id": "room_101"
+    }
+  ],
+  "walls": [
+    {
+      "x2": 8,
+      "y1": 0,
+      "x1": 8,
+      "y2": 5,
+      "material": "metal",
+      "id": "wall_1"
+    }
+  ],
+  "devices": [
+    {
+      "y": 0,
+      "type": "temperature_sensor",
+      "id": "temp_101",
+      "room_id": "room_101",
+      "x": 0
+    }
+  ],
+  "gateways": [
+    {
+      "y": 4,
+      "x": 3,
+      "id": "gateway_1",
+      "active": true
+    }
+  ],
+  "reception": {
+    "y": 340,
+    "x": 725,
+    "id": "reception"
+  },
+  "requirements": {
+    "min_reliability": 0.95,
+    "max_latency_ms": 2000,
+    "coverage_required": 0.95
+  }
+}

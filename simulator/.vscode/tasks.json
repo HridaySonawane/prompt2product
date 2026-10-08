@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Configure CMake",
+      "type": "process",
+      "command": "cmake",
+      "args": ["-S", ".", "-B", "build", "-G", "NMake Makefiles", "-DCMAKE_BUILD_TYPE=Debug"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build simulator",
+      "type": "process",
+      "command": "cmake",
+      "args": ["--build", "build"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "Configure CMake",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$msCompile"]
+    },
+    {
+      "label": "Run basic geometry",
+      "type": "process",
+      "command": "${workspaceFolder}/build/iot_simulator.exe",
+      "args": ["tests/basic.json"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "Build simulator",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+# CMake build directories and generated files
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+CMakeUserPresets.json
+
+# Compiled artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.out
+iot_simulator
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# IDE-generated files
+.vs/
+.vscode/
+!simulator/.vscode/
+!simulator/.vscode/*.json
+.idea/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
