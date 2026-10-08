@@ -47,14 +47,14 @@ class LayoutCountTests(unittest.TestCase):
         self.assertEqual(candidate, layout)
         self.assertIsNot(candidate, layout)
 
-    def test_generated_areas_fit_without_overlap_and_walls_bound_rooms(self):
+    def test_generated_areas_fit_without_overlap_and_do_not_generate_walls(self):
         layout = fixture('network-hotel')
         original = copy.deepcopy(layout)
         for prompt in (PROMPT, '1 room', '30 rooms, 1 lobby, 1 bathroom', '2 rooms, 1 reception'):
             candidate = build_layout(layout, explicit_counts(prompt))
             self.assertEqual(candidate['floor'], layout['floor'])
             self.assertEqual(candidate['simulation'], layout['simulation'])
-            self.assertEqual(len(candidate['walls']), 4 * len(candidate['rooms']))
+            self.assertEqual(candidate['walls'], [])
             for index, room in enumerate(candidate['rooms']):
                 self.assertGreaterEqual(room['x'], 16)
                 self.assertGreaterEqual(room['y'], 16)
@@ -67,10 +67,6 @@ class LayoutCountTests(unittest.TestCase):
                         other['x'] + other['width'] + 15.999 <= room['x'] or
                         room['y'] + room['height'] + 15.999 <= other['y'] or
                         other['y'] + other['height'] + 15.999 <= room['y'])
-                edges = candidate['walls'][index*4:index*4+4]
-                self.assertTrue(all(w['material'] == 'drywall' for w in edges))
-                self.assertEqual(edges[0]['x1'], room['x'])
-                self.assertEqual(edges[0]['x2'], room['x'] + room['width'])
             reception = candidate['reception']
             self.assertTrue(any(r['x'] <= reception['x'] <= r['x'] + r['width'] and
                 r['y'] <= reception['y'] <= r['y'] + r['height'] for r in candidate['rooms']))
@@ -119,6 +115,9 @@ class DesignIntegrationTests(unittest.TestCase):
         self.assertEqual(result['design_request']['mode'], 'new_layout')
         self.assertEqual(actual_counts(result['layout']), EXPECTED)
         self.assertEqual(len(result['layout']['devices']), 3)
+        self.assertEqual(result['layout']['walls'], [])
+        self.assertTrue(all(link['walls_crossed'] == 0 and link['wall_attenuation_db'] == 0
+                            for link in result['simulation']['geometry']['links']))
         self.assertEqual(result['simulation']['summary']['total_devices'], 3)
         self.assertEqual(self.layout, fixture('network-hotel'))
 
@@ -129,6 +128,7 @@ class DesignIntegrationTests(unittest.TestCase):
         self.assertEqual(actual_counts(result['layout']),
             {'room': 3, 'bathroom': 1, 'lobby': 1, 'reception': 0, 'gateways': 2})
         self.assertEqual(len(result['layout']['devices']), 4)
+        self.assertEqual(result['layout']['walls'], [])
 
     @patch('backend.planning.ask_ollama')
     def test_incorrect_ai_gateway_count_is_labeled_fallback(self, ask):

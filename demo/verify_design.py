@@ -59,6 +59,9 @@ def main():
             assert result['design_request']['mode'] == 'new_layout'
             assert actual_counts(result['layout']) == expected, result['design_request']
             assert len(result['layout']['devices']) == devices
+            assert result['layout']['walls'] == []
+            assert all(link['walls_crossed'] == 0 and link['wall_attenuation_db'] == 0
+                       for link in result['simulation']['geometry']['links'])
             INPUT_VALIDATOR.validate(result['layout'])
             OUTPUT_VALIDATOR.validate(result['simulation'])
             # The returned metrics must be precisely the final positions' C++ run.
@@ -67,7 +70,7 @@ def main():
             evidence['cases'].append({'prompt': prompt, 'seconds': round(time.monotonic() - started, 3),
                 'counts': actual_counts(result['layout']), 'result': result})
             layout = result['layout']
-            print('PASS:', prompt, '|', expected, '| model:', result['planner']['model'], flush=True)
+            print('PASS:', prompt, '|', expected, '| walls: 0 | model:', result['planner']['model'], flush=True)
         response = client.post('/api/design', json={'layout': layout, 'prompt': '2 rooms, 3 gateways'})
         assert response.status_code == 422, response.text
         OUTPUT_VALIDATOR.validate(response.json())

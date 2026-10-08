@@ -71,8 +71,8 @@ def build_layout(layout, counts):
     """Use the existing floor/scale, replace areas and walls only for count lists.
 
     A 16-unit gap keeps editor areas separated. Generated areas are at least
-    64x64 logical units to fit markers. Four independent drywall segments bound
-    each rectangle; these are explicitly documented simulation assumptions.
+    64x64 logical units to fit markers. Area outlines are visual boundaries;
+    generated layouts start without physical attenuation walls.
     """
     candidate = copy.deepcopy(layout)
     if not any(key in counts for key in AREA_TYPES):
@@ -88,7 +88,7 @@ def build_layout(layout, counts):
     if not choices:
         raise ValueError("Requested areas do not fit this floor with 64-unit minimum sizes and 16-unit gaps")
     _, columns, _, w, h = min(choices)
-    rooms, walls = [], []
+    rooms = []
     names = {"room": "Room", "bathroom": "Bathroom", "lobby": "Lobby", "reception": "Reception"}
     for kind in AREA_TYPES:
         for index in range(counts[kind]):
@@ -97,12 +97,7 @@ def build_layout(layout, counts):
             room_id = f"{kind}_{index + 1}"
             rooms.append({"id": room_id, "name": f"{names[kind]} {index + 1}", "type": kind,
                           "x": x, "y": y, "width": w, "height": h})
-            corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
-            for edge in range(4):
-                a, b = corners[edge], corners[(edge + 1) % 4]
-                walls.append({"id": f"wall_{room_id}_{edge + 1}", "x1": a[0], "y1": a[1],
-                              "x2": b[0], "y2": b[1], "material": "drywall"})
-    candidate.update(rooms=rooms, walls=walls, devices=[], gateways=[])
+    candidate.update(rooms=rooms, walls=[], devices=[], gateways=[])
     reception_room = next((r for kind in ('reception', 'lobby', 'room', 'bathroom')
                            for r in rooms if r['type'] == kind), rooms[0])
     candidate['reception'] = {'id': layout['reception']['id'],

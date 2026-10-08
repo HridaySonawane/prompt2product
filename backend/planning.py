@@ -197,7 +197,7 @@ def design(runner, settings, layout, prompt):
     LOGGER.info("design completed mode=%s requested_counts=%s actual_counts=%s planner=%s simulation_status=%s",
                 mode, json.dumps(counts, sort_keys=True), json.dumps(actual, sort_keys=True), source, result['status'])
     if rebuilding:
-        proposal['reasoning'] += " Requested area counts were used to build a rectangular layout with drywall boundaries."
+        proposal['reasoning'] += " Requested area counts were used to build a wall-free rectangular layout; area outlines do not attenuate signals."
     return {"schema_version": "1.0", "status": "ok", "layout": candidate, "simulation": result,
         "design_request": {"mode": mode, "requested_counts": counts, "actual_counts": actual, "matched": True},
         "planner": {"source": source, "model": settings.ollama_model if source == "ollama" else None,

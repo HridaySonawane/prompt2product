@@ -1,5 +1,9 @@
 # Explicit design counts — regression evidence, 2026-10-08
 
+Update: new generated layouts now use `walls: []`, superseding the generated
+drywall policy and network metrics recorded below. Monitoring-only layouts keep
+their existing walls. See `WALL-FREE-DESIGN.md` for the latest verification.
+
 CHECKPOINT: CP10 regression fix
 
 STATUS: COMPONENT PASSED; browser/shared acceptance pending.

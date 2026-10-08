@@ -36,8 +36,10 @@ non-overlapping rectangles and replaces the previous areas/walls/devices/gateway
 Unspecified area categories have count zero; it does not retain default rooms.
 The required reception point lives in a requested reception area, lobby or another
 surviving area; it does not create an unrequested reception room. Generated areas
-have a 16 logical-unit gap and minimum 64x64 size, and four drywall boundaries
-each. New guest rooms receive temperature sensors; bathrooms receive leak sensors.
+have a 16 logical-unit gap and minimum 64x64 size. New generated layouts have
+`walls: []`: visible area outlines do not cause attenuation. Existing walls remain
+in monitoring-only requests and continue to affect simulation. New guest rooms
+receive temperature sensors; bathrooms receive leak sensors.
 Ollama interprets monitoring thresholds and proposes gateway positions; the area
 packing and sensor centres are deterministic, rather than model-drawn floor plans.
 
