@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Twinforge — IoT Security Digital Twin",
-  description: "Design, simulate, and harden an IoT network for your building.",
+  title: "IoTForge — IoT Network Geometry Planner",
+  description: "Plan a single-floor IoT layout and verify sensor-to-gateway geometry with the C++ simulator.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

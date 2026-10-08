@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IoTForge frontend
 
-## Getting Started
+This checkout currently runs the browser UI with Next.js. It sends complete
+schema 1.0 layout JSON to the FastAPI service and displays geometry links and
+structured backend errors. The API returns geometry only for CP00–02; the UI
+does not present coverage, reliability, latency, or requirement results as
+simulated values.
 
-First, run the development server:
+## Run locally
 
-```bash
+Start the C++ simulator build and FastAPI service first. The full Windows
+startup steps and service responsibilities are in the [repository README](../README.md).
+
+Then, from this directory:
+
+```bat
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`. The default API URL is
+`http://127.0.0.1:8000`. Override it before starting Next.js with
+`NEXT_PUBLIC_IOTFORGE_API_URL` if FastAPI uses another address. The backend must
+allow the frontend origin in `IOTFORGE_CORS_ORIGINS`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The status indicator checks `GET /api/health`; a successful health response
+means FastAPI is reachable and reports whether the simulator executable file
+exists. It does not itself prove a successful simulation. Use **Simulate layout**
+to run a real request through FastAPI and C++.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Framework note
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The approved product scope names Vite, while this checkout and its repository
+instructions currently use Next.js. This integration keeps the current
+framework; resolve that scope mismatch with the team before making a
+framework-level change.
