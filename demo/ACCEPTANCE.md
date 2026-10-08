@@ -63,4 +63,12 @@ READY FOR SHARED ACCEPTANCE: YES
 Official checkpoint closure remains the team's decision; this report records
 component and real integration evidence without declaring team closure.
 
-Release verification follow-up: second cold start and final browser pass pending.
+Release verification follow-up: PASSED. The extracted ZIP cold-started twice. After
+the second start, two additional live workflows required actual Ollama design and
+optimization and passed. The complete browser workflow also passed twice without
+manual JSON/code edits or service restarts, including real Ollama design and
+optimization, room rename/resize, C++ metrics, failure and backup recovery.
+The recovered UI showed the original gateway offline, backup active, 6/6 reachable,
+1200/1200 delivered, 310ms worst latency and requirement PASS.
+Final production screenshot: iotforge-final.jpg (local deliverable).
+No known demo-blocking issues remain.
