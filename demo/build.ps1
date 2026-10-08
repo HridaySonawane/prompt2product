@@ -30,4 +30,4 @@ try {
     Invoke-Checked -Program 'npm.cmd' -Arguments @('run', 'build')
 } finally { Pop-Location }
 & (Join-Path $PSScriptRoot 'package.ps1')
-Write-Output 'Build and tests succeeded. Run .\demo\start.ps1 and open http://127.0.0.1:8000.'
+Write-Output 'Build and tests succeeded. Configure Ollama, then run .\start.ps1 and open http://127.0.0.1:8000.'

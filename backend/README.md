@@ -1,6 +1,7 @@
 # FastAPI orchestration
 
-Run from the repository root using `demo/start.ps1` after `demo/build.ps1`.
+Run from the repository root using `start.ps1` after `demo/build.ps1` and Ollama
+model setup. The launcher requires configured Ollama and starts its service if needed.
 FastAPI hosts the built frontend and `/api/*` together at 127.0.0.1:8000.
 API docs: `/api/docs`. See root README and shared/API.md for all endpoints.
 

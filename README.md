@@ -12,22 +12,56 @@ result comes from C++, including results for AI proposals.
 ## Quick start — Windows 10/11 x64
 
 Prerequisites: Visual Studio 2022 **Desktop development with C++**, CMake/NMake,
-Python 3.11+, and Node.js 22.12+ for building. No database or cloud account.
+Python 3.11+, Node.js 22.12+ for building, and
+[Ollama for Windows](https://ollama.com/download/windows). No database or cloud
+account. Open a new terminal after installing these tools.
 
-From the repository root in PowerShell:
+One-time setup from the repository root (`prompt2product/`):
 
 ```powershell
+ollama pull qwen2.5:1.5b
 .\demo\build.ps1
-.\demo\start.ps1
+```
+
+Every subsequent run uses **one master script at the repository root**:
+
+```powershell
+.\start.ps1
 ```
 
 Open **http://127.0.0.1:8000**. API docs: **http://127.0.0.1:8000/api/docs**.
-Ctrl+C stops the server. The build script discovers MSVC using vswhere, builds
+The launcher starts Ollama if necessary, verifies the installed model, and starts
+FastAPI, which serves the built React application. C++ runs on demand per request;
+there is no separate simulator service or frontend development server to launch.
+**Ctrl+C** stops the app and any Ollama process started by this launcher. An
+already-running Ollama service is reused and remains running when the app stops.
+Logs are saved in ignored `.runtime/`. A second app on the same port is rejected.
+
+If Ollama/the model is missing or unavailable, startup prints one short
+**Configure Ollama** message and exits with a nonzero code. It does not install
+software, download models, launch a partial application or silently use fallback.
+Runtime AI failures still use the explicitly labelled fallback described below.
+
+Useful options:
+
+```powershell
+.\start.ps1 -Check      # Validate setup, then exit; leave no newly started services
+.\start.ps1 -Port 8001  # Optional alternate app port
+```
+
+If PowerShell blocks local scripts, use a process-only invocation:
+
+```bat
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+The build script discovers MSVC using vswhere, builds
 Debug and a static-runtime Release executable, runs CTest/backend tests, installs
 pinned dependencies, builds the frontend, and generates the runtime ZIP.
 Use `demo\build.ps1 -SkipInstall` to rebuild with dependencies already installed.
-If script execution is disabled, use an initialized developer command prompt
-and the manual commands below; no machine-wide execution-policy change is needed.
+For first-time builds under a restrictive execution policy, use
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\demo\build.ps1`,
+or the manual build commands below. No machine-wide policy change is needed.
 
 The frontend is React + TypeScript + Vite. The former Next/Turbopack build was
 explicitly replaced with the approved Vite stack after it failed to produce a
@@ -41,13 +75,14 @@ Install [Ollama for Windows](https://ollama.com/download/windows), then:
 ollama pull qwen2.5:1.5b
 ```
 
-Keep Ollama running; use `ollama serve` if its desktop app is not running.
+The root launcher starts the Ollama service when it is not already running.
 The model is approximately 1 GB and is **not included in the runtime ZIP**.
 `GET /api/ai/health` reports model readiness. AI uses the local Ollama API;
 no paid API key is required. Set `IOTFORGE_OLLAMA_MODEL`, `IOTFORGE_OLLAMA_URL`,
 or `IOTFORGE_AI_TIMEOUT` before starting FastAPI to change the defaults.
 
-Manual simulation needs no AI. AI failure produces a visible **Rule-based
+The simulation engine itself needs no AI; the master launcher requires a
+configured model for the complete demonstration. A later AI failure produces a visible **Rule-based
 fallback · not AI** label. Fallback proposals and backup placements are also
 verified by C++; neither fallback nor AI invents metrics. `--require-ai` in the
 live acceptance script rejects fallback, allowing genuine AI verification.
@@ -55,10 +90,18 @@ live acceptance script rejects fallback, allowing genuine AI verification.
 ### Prebuilt runtime
 
 `demo\build\IoTForge-windows-x64.zip` contains the production frontend, MSVC
-Release simulator, backend, shared schemas, and `start.cmd`. Extract it and run
-`start.cmd` on Windows x64 with Python 3.11+ on PATH. Its first run installs the
-pinned Python runtime requirements. No Node, Visual Studio, or CMake is needed
-for the prebuilt runtime. Ollama/model installation is optional and separate.
+Release simulator, backend, shared schemas, the same master `start.ps1`, and a
+`start.cmd` shortcut. On Windows x64, install Python 3.11+ and Ollama, extract the
+archive, and perform this one-time setup in the extracted root:
+
+```bat
+python -m venv backend\.venv
+backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+ollama pull qwen2.5:1.5b
+```
+
+Then run `start.cmd` or `.\start.ps1`. No Node, Visual Studio, or CMake is needed
+for the prebuilt runtime. Ollama/model installation remains a separate setup step.
 See the archive's `START-HERE.txt`; the source build commands apply to this repo.
 
 ## Demonstration
@@ -158,7 +201,7 @@ cd frontend
 npm ci
 npm run build
 cd ..
-backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 ```
 
 For frontend hot reload, use a second terminal: `cd frontend` then `npm run dev`.
@@ -214,6 +257,28 @@ backend\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
 backend\.venv\Scripts\python.exe -m backend.verify_http
 backend\.venv\Scripts\python.exe demo\verify_final.py --require-ai
 ```
+
+With all app/Ollama instances stopped, test the master launcher's missing-AI,
+missing-model, successful preflight and duplicate-port paths:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\demo\verify_launcher.ps1
+```
+
+This test starts its own Ollama service and stops it before returning. For the
+full lifecycle check, run `.\start.ps1` in a **foreground terminal**. In a second
+terminal, run `backend\.venv\Scripts\python.exe -m backend.verify_http` and
+`Invoke-RestMethod http://127.0.0.1:8000/api/ai/health`. Confirm all eight HTTP
+checks pass and AI is available. Press Ctrl+C in the launcher terminal. If Ollama
+was originally stopped, this command should then return no listeners:
+
+```powershell
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+  Where-Object { $_.LocalPort -in @(8000,11434) }
+```
+
+The interactive launcher is intended for a normal terminal, not a PowerShell
+background job. Keep that terminal open while using the app.
 
 Run live verification with FastAPI and Ollama already running. The final script
 runs the full workflow **twice**, requires genuine AI with `--require-ai`, compares

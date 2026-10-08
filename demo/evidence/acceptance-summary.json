@@ -1,6 +1,6 @@
 {
   "date": "2026-10-08",
-  "revision": "room-reflow-and-locked-content-editor",
+  "revision": "root-master-launcher-and-final-cleanup",
   "environment": "Windows x64, MSVC 19.44 NMake Debug/Release, Python 3.11, Node 22, Vite 7.3.7",
   "cpp_ctest_debug": "3/3 passed",
   "cpp_ctest_release": "3/3 passed",
@@ -17,7 +17,7 @@
     "model": "qwen2.5:1.5b",
     "message": "Local AI ready"
   },
-  "extracted_runtime_api_workflows": "Historical prior UI revision: 2/2 passed; current archive byte-verified against the new build (11 files)",
+  "extracted_runtime_api_workflows": "Historical prior UI revision: 2/2 passed; final archive refreshed with shared root launcher and README, both source-verified",
   "production_asset_delivery": "Port 8000 now serves current source frontend; old packaged server replaced. Archive assets match current dist byte-for-byte.",
   "workflows": [
     {
@@ -149,12 +149,16 @@
   "ready_for_shared_acceptance": false,
   "runtime_archive": {
     "filename": "IoTForge-windows-x64.zip",
-    "bytes": 382067,
-    "sha256": "5ff005486cf1b13c7f5c1c7c70fe9851279dafdd18ff94c7d0b01537da6219ab"
+    "bytes": 385010,
+    "sha256": "cb8810c4cb17c178c0eab0ef4400168efde32263faabba15b2f0329e8945c31a"
   },
   "frontend_react_event_tests": "17/17 passed (offline jsdom, explicit API doubles and emulated capture; not browser acceptance)",
   "frontend_real_cpp_editor_integration": "3/3 passed, none skipped; actual MSVC Release stdin/stdout, edited coordinates and repeatable results",
   "frontend_total_tests": "37/37 passed, none skipped",
   "source_server_api_workflows": "2/2 passed at http://127.0.0.1:8000 with actual Ollama and C++",
-  "editor_report": "demo/EDITOR-ACCEPTANCE.md"
+  "editor_report": "demo/EDITOR-ACCEPTANCE.md",
+  "launcher_preflight_tests": "4/4 passed: missing Ollama, missing model, valid setup, occupied port",
+  "launcher_foreground_lifecycle": "Passed: real frontend, FastAPI, C++ HTTP checks, Ollama availability, actual Ctrl+C cleanup",
+  "launcher_report": "demo/LAUNCHER-ACCEPTANCE.md",
+  "final_service_state": "Stopped: no listeners on 3000/8000/8002/11434; no IoTForge backend or Ollama service processes"
 }
