@@ -43,3 +43,10 @@ Thumbs.db
 *.suo
 *.VC.db
 *.VC.VC.opendb
+
+# Python backend environment and generated files
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env

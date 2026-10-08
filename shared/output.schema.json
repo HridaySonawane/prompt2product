@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IoTForge output, schema 1.0, CP01-02",
+  "description": "One geometry result or structured error. No signal or network metrics in this checkpoint. Finite numeric values only.",
+  "type": "object",
+  "required": ["schema_version", "status"],
+  "properties": {"schema_version": {"const": "1.0"}},
+  "oneOf": [
+    {
+      "required": ["geometry"],
+      "properties": {
+        "status": {"const": "ok"},
+        "geometry": {
+          "type": "object", "required": ["links"],
+          "properties": {"links": {"type": "array", "items": {"$ref": "#/$defs/link"}}}
+        }
+      },
+      "not": {"required": ["error"]}
+    },
+    {
+      "required": ["error"],
+      "properties": {
+        "status": {"const": "error"},
+        "error": {
+          "type": "object", "required": ["code", "message"],
+          "properties": {"code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}}
+        }
+      },
+      "not": {"required": ["geometry"]}
+    }
+  ],
+  "$defs": {
+    "link": {
+      "type": "object", "required": ["source", "destination", "distance", "walls_crossed", "wall_attenuation_db"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1}, "destination": {"type": "string", "minLength": 1},
+        "distance": {"type": "number", "minimum": 0},
+        "walls_crossed": {"type": "integer", "minimum": 0},
+        "wall_attenuation_db": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

@@ -189,3 +189,12 @@ No signal propagation, RF path loss, RSSI, coverage, reliability calculation,
 network connectivity, packet loss, latency simulation, optimization, AI,
 backend API, or frontend is implemented. Wall thickness is not modeled. This
 checkpoint stops at validated JSON and geometry for every device/gateway pair.
+
+## Shared contract and backend integration
+
+The existing schema 1.0 field names are now recorded in
+`../shared/input.schema.json` and `../shared/output.schema.json`. See
+`../shared/README.md` for shared acceptance rules and `../backend/README.md` for
+the real FastAPI subprocess adapter. Run the backend integration tests from
+the repository root after building this executable; no simulator algorithm
+change is required for the HTTP adapter.

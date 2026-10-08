@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IoTForge input, schema 1.0, CP01-02",
+  "description": "Logical 2D floor-plan units. Finite numbers only. Extra fields are tolerated but do not implement future features. IDs are unique within each collection; room_id references a room. Semantic constraints are checked by C++.",
+  "type": "object",
+  "required": ["schema_version", "floor", "rooms", "walls", "devices", "gateways", "reception", "requirements"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "floor": {"$ref": "#/$defs/floor"},
+    "rooms": {"type": "array", "items": {"$ref": "#/$defs/room"}},
+    "walls": {"type": "array", "items": {"$ref": "#/$defs/wall"}},
+    "devices": {"type": "array", "items": {"$ref": "#/$defs/device"}},
+    "gateways": {"type": "array", "items": {"$ref": "#/$defs/gateway"}},
+    "reception": {"$ref": "#/$defs/reception"},
+    "requirements": {"$ref": "#/$defs/requirements"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1},
+    "coordinate": {"type": "number"},
+    "dimension": {"type": "number", "exclusiveMinimum": 0},
+    "fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "floor": {
+      "type": "object", "required": ["width", "height"],
+      "properties": {
+        "width": {"$ref": "#/$defs/dimension"}, "height": {"$ref": "#/$defs/dimension"}
+      }
+    },
+    "room": {
+      "type": "object", "required": ["id", "name", "type", "x", "y", "width", "height"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "name": {"type": "string"},
+        "type": {"enum": ["room", "lobby", "bathroom", "reception"]},
+        "x": {"$ref": "#/$defs/coordinate"}, "y": {"$ref": "#/$defs/coordinate"},
+        "width": {"$ref": "#/$defs/dimension"}, "height": {"$ref": "#/$defs/dimension"}
+      }
+    },
+    "wall": {
+      "type": "object", "required": ["id", "x1", "y1", "x2", "y2", "material"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "x1": {"$ref": "#/$defs/coordinate"}, "y1": {"$ref": "#/$defs/coordinate"},
+        "x2": {"$ref": "#/$defs/coordinate"}, "y2": {"$ref": "#/$defs/coordinate"},
+        "material": {"enum": ["drywall", "wood", "concrete", "metal"]}
+      }
+    },
+    "device": {
+      "type": "object", "required": ["id", "type", "x", "y", "room_id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "type": {"enum": ["temperature_sensor", "leak_sensor"]},
+        "x": {"$ref": "#/$defs/coordinate"}, "y": {"$ref": "#/$defs/coordinate"},
+        "room_id": {"$ref": "#/$defs/id"}
+      }
+    },
+    "gateway": {
+      "type": "object", "required": ["id", "x", "y", "active"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "x": {"$ref": "#/$defs/coordinate"}, "y": {"$ref": "#/$defs/coordinate"},
+        "active": {"type": "boolean"}
+      }
+    },
+    "reception": {
+      "type": "object", "required": ["id", "x", "y"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "x": {"$ref": "#/$defs/coordinate"}, "y": {"$ref": "#/$defs/coordinate"}
+      }
+    },
+    "requirements": {
+      "type": "object", "required": ["coverage_required", "max_latency_ms", "min_reliability"],
+      "properties": {
+        "coverage_required": {"$ref": "#/$defs/fraction"},
+        "max_latency_ms": {"type": "number", "minimum": 0},
+        "min_reliability": {"$ref": "#/$defs/fraction"}
+      }
+    }
+  }
+}

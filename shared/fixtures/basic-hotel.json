@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "floor": {"width": 1000, "height": 600},
+  "rooms": [
+    {"id": "room_101", "name": "Room 101", "type": "room", "x": 50, "y": 50, "width": 180, "height": 140},
+    {"id": "room_102", "name": "Room 102", "type": "room", "x": 250, "y": 50, "width": 180, "height": 140},
+    {"id": "room_103", "name": "Room 103", "type": "room", "x": 450, "y": 50, "width": 180, "height": 140},
+    {"id": "room_104", "name": "Room 104", "type": "room", "x": 50, "y": 250, "width": 180, "height": 140},
+    {"id": "room_105", "name": "Room 105", "type": "room", "x": 450, "y": 250, "width": 180, "height": 140},
+    {"id": "lobby", "name": "Lobby", "type": "lobby", "x": 250, "y": 250, "width": 180, "height": 140},
+    {"id": "bathroom", "name": "Bathroom", "type": "bathroom", "x": 50, "y": 450, "width": 180, "height": 100},
+    {"id": "reception_room", "name": "Reception", "type": "reception", "x": 650, "y": 250, "width": 250, "height": 180}
+  ],
+  "walls": [],
+  "devices": [
+    {"id": "temp_101", "type": "temperature_sensor", "x": 120, "y": 120, "room_id": "room_101"},
+    {"id": "temp_102", "type": "temperature_sensor", "x": 320, "y": 120, "room_id": "room_102"},
+    {"id": "temp_103", "type": "temperature_sensor", "x": 520, "y": 120, "room_id": "room_103"},
+    {"id": "temp_104", "type": "temperature_sensor", "x": 120, "y": 320, "room_id": "room_104"},
+    {"id": "temp_105", "type": "temperature_sensor", "x": 520, "y": 320, "room_id": "room_105"},
+    {"id": "leak_1", "type": "leak_sensor", "x": 120, "y": 500, "room_id": "bathroom"}
+  ],
+  "gateways": [{"id": "gateway_1", "x": 340, "y": 320, "active": true}],
+  "reception": {"id": "reception", "x": 725, "y": 340},
+  "requirements": {"coverage_required": 0.95, "max_latency_ms": 2000, "min_reliability": 0.95}
+}
