@@ -104,3 +104,13 @@ Invoke-RestMethod -Uri http://127.0.0.1:8000/api/design -Method Post -ContentTyp
 
 For frontend integration use fetch with the same object and application/json.
 See demo/verify_final.py for repeated real requests and response assertions.
+## Editor and planner placement policy
+
+The web editor pins sensors to their `room_id` and gateways to editor-only area
+bindings. Moving or resizing an area carries its assigned devices; room changes
+are explicit. No input/output field names were changed. Newly proposed gateways
+from `/api/design`, `/api/optimize` and backup recovery are projected to the nearest
+room interior with up to a 24 logical-unit marker inset before simulation. Tiny
+rooms use their centre. Out-of-floor AI proposals remain invalid. Responses contain
+the final positions and the real C++ result for those exact positions. External
+`/api/simulate` clients retain the existing floor-bound gateway contract.
