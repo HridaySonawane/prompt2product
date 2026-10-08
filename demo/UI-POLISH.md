@@ -1,5 +1,8 @@
 # Workspace polish and placement verification — 2026-10-08
 
+Historical report for the first UI polish. Current room movement/content editing
+and test evidence are recorded in [EDITOR-ACCEPTANCE.md](EDITOR-ACCEPTANCE.md).
+
 CHECKPOINT: CP10 (final project polish)
 
 STATUS: COMPONENT PASSED for automated checks; BLOCKED for final visual acceptance.

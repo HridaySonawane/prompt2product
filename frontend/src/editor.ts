@@ -1,4 +1,5 @@
 import type { Layout, Room } from "./models";
+import { reflowRooms } from "./room_layout";
 
 export type Point = { x: number; y: number };
 export type GatewayRooms = Record<string, string>;
@@ -9,6 +10,24 @@ export const roomCenter = (room: Room): Point => ({
   x: room.x + room.width / 2,
   y: room.y + room.height / 2,
 });
+
+export function bindReception(layout: Layout): string {
+  const contains = (room: Room) =>
+    layout.reception.x >= room.x &&
+    layout.reception.x <= room.x + room.width &&
+    layout.reception.y >= room.y &&
+    layout.reception.y <= room.y + room.height;
+  return (
+    (
+      layout.rooms.find(
+        (room) => room.type === "reception" && contains(room),
+      ) ??
+      layout.rooms.find(contains) ??
+      layout.rooms.find((room) => room.type === "reception") ??
+      nearestRoom(layout.reception, layout.rooms)
+    )?.id ?? ""
+  );
+}
 
 // Keep the entire marker inside the area, including its selection outline.
 // Small imported rooms use their centre and a correspondingly smaller SVG marker.
@@ -51,6 +70,7 @@ export function bindGateways(layout: Layout): GatewayRooms {
 export function constrainLayout(
   layout: Layout,
   bindings: GatewayRooms,
+  receptionRoomId = bindReception(layout),
 ): Layout {
   for (const sensor of layout.devices) {
     const room = layout.rooms.find((item) => item.id === sensor.room_id);
@@ -64,6 +84,12 @@ export function constrainLayout(
       throw new Error(`Gateway ${gateway.id} needs an existing assigned area.`);
     Object.assign(gateway, clampToRoom(gateway, room));
   }
+  const receptionRoom = layout.rooms.find(
+    (room) => room.id === receptionRoomId,
+  );
+  if (!receptionRoom)
+    throw new Error("Reception needs an existing assigned area.");
+  Object.assign(layout.reception, clampToRoom(layout.reception, receptionRoom));
   return layout;
 }
 
@@ -72,8 +98,11 @@ export function moveRoom(
   id: string,
   patch: Partial<Room>,
   bindings: GatewayRooms,
+  receptionRoomId = bindReception(layout),
 ): void {
-  const room = layout.rooms.find((item) => item.id === id);
+  const candidate = structuredClone(layout);
+  const oldRooms = layout.rooms;
+  const room = candidate.rooms.find((item) => item.id === id);
   if (!room) return;
   const old = { ...room };
   Object.assign(room, patch);
@@ -90,21 +119,27 @@ export function moveRoom(
   );
   room.x = clamp(room.x, 0, layout.floor.width - room.width);
   room.y = clamp(room.y, 0, layout.floor.height - room.height);
-  const occupants: Point[] = [
-    ...layout.devices.filter((item) => item.room_id === id),
-    ...layout.gateways.filter((item) => bindings[item.id] === id),
+  candidate.rooms = reflowRooms(candidate, id);
+  carryContents(candidate, oldRooms, bindings, receptionRoomId);
+  constrainLayout(candidate, bindings, receptionRoomId);
+  Object.assign(layout, candidate);
+}
+
+function carryContents(
+  layout: Layout,
+  oldRooms: Room[],
+  bindings: GatewayRooms,
+  receptionRoomId: string,
+) {
+  const occupants = [
+    ...layout.devices.map((item) => ({ item, roomId: item.room_id })),
+    ...layout.gateways.map((item) => ({ item, roomId: bindings[item.id] })),
+    { item: layout.reception, roomId: receptionRoomId },
   ];
-  if (room.type === "reception") {
-    // Reception follows its area, just like its associated equipment.
-    if (
-      old.x <= layout.reception.x &&
-      layout.reception.x <= old.x + old.width &&
-      old.y <= layout.reception.y &&
-      layout.reception.y <= old.y + old.height
-    )
-      occupants.push(layout.reception);
-  }
-  for (const item of occupants)
+  for (const { item, roomId } of occupants) {
+    const old = oldRooms.find((room) => room.id === roomId),
+      room = layout.rooms.find((room) => room.id === roomId);
+    if (!old || !room) continue;
     Object.assign(
       item,
       clampToRoom(
@@ -115,7 +150,43 @@ export function moveRoom(
         room,
       ),
     );
-  constrainLayout(layout, bindings);
+  }
+}
+
+export function prepareLayout(
+  layout: Layout,
+  bindings: GatewayRooms,
+  receptionRoomId: string,
+): Layout {
+  const candidate = structuredClone(layout);
+  const original = candidate.rooms;
+  candidate.rooms = reflowRooms(candidate);
+  carryContents(candidate, original, bindings, receptionRoomId);
+  return constrainLayout(candidate, bindings, receptionRoomId);
+}
+
+export function removeArea(
+  layout: Layout,
+  id: string,
+  bindings: GatewayRooms,
+  receptionRoomId: string,
+): string {
+  if (layout.rooms.length <= 1)
+    throw new Error(
+      "Keep at least one area for reception. You can remove its sensors and gateways.",
+    );
+  layout.rooms = layout.rooms.filter((room) => room.id !== id);
+  layout.devices = layout.devices.filter((sensor) => sensor.room_id !== id);
+  layout.gateways = layout.gateways.filter(
+    (gateway) => bindings[gateway.id] !== id,
+  );
+  if (receptionRoomId === id) {
+    const replacement =
+      layout.rooms.find((room) => room.type === "reception") ?? layout.rooms[0];
+    receptionRoomId = replacement.id;
+    Object.assign(layout.reception, roomCenter(replacement));
+  }
+  return receptionRoomId;
 }
 
 export function reassignSensor(

@@ -63,12 +63,16 @@ See the archive's `START-HERE.txt`; the source build commands apply to this repo
 
 ## Demonstration
 
-1. Rename/resize an area in Properties, or drag it on the floor plan. Add/delete
-   areas or wall segments. Drag sensors/gateways or use their coordinate fields.
-   Devices stay inside their assigned area, including their selection outline.
-   Room edits carry their devices proportionally; changing **Assigned room**
-   explicitly moves a device to the new area's centre. Arrow keys move a focused
-   marker by one unit, or ten with Shift. Choose wall materials in the Walls tab.
+1. Click a room to open its **Contents** list. Drag the room body or any locked
+   content to move the whole room. Neighbouring areas automatically rearrange
+   when needed, carrying their own sensors, gateways and reception too. Add a
+   temperature/leak sensor or gateway directly in Contents; inspect or remove
+   individual items there. Rename the room or expand **Position & size** to resize.
+   **Unlock individual placement** permits device dragging and coordinate edits
+   only inside its assigned room. Choosing another room locks contents again.
+   Use **Assigned room** to explicitly transfer a device. Arrow keys move a focused
+   room/marker one unit, or ten with Shift; Escape cancels an active drag.
+   Choose independent wall segments and their materials in the Walls tab.
 2. Click **Plan deployment**, enter monitoring requirements, and click **Generate design**. Verify that the
    provenance says **Ollama**, and that sensors and the gateway appear on the floor.
 3. Click **Simulate network**. Inspect metrics, requirements, per-sensor results,
@@ -86,15 +90,28 @@ See the archive's `START-HERE.txt`; the source build commands apply to this repo
 
 ### Editor placement policy
 
-Sensors keep the shared `room_id` field. Gateway room bindings are editor state;
-no gateway fields were added to schema 1.0. Imported gateways are bound to the
+Sensors keep the shared `room_id` field. Gateway and reception area bindings are
+editor state; no fields were added to schema 1.0. Imported gateways are bound to the
 nearest area, preferring an area that already fits their marker. Imported devices
 are fitted inside their areas and the adjusted layout is simulated again before
 results appear. Backend design, optimization and backup proposals fit new gateway
 positions to the nearest area's interior **before** C++ evaluates them. This is an
 editor/planner placement constraint, not a new radio-model assumption. External
 API clients may still place gateways anywhere inside the floor under the existing
-contract. Room removal also removes its assigned sensors and gateways.
+contract. Room removal also removes its assigned sensors and gateways. Reception
+is a required singleton: move it with **Assigned room** or **Move reception here**;
+deleting its area relocates it to a surviving area. The final area cannot be deleted.
+
+Room movement and resizing use deterministic bounded packing with an eight-unit
+gap. The dragged area stays at the requested position within floor boundaries;
+other areas are moved to nearby available positions without resizing them. If no
+safe arrangement is found within the search budget, the last valid layout stays
+visible and a message explains the rejection. This is a practical packing heuristic,
+not a guarantee of finding every mathematically possible arrangement. A cancelled
+drag (Escape, pointer cancellation, lost capture or window blur) restores all rooms
+and contents together. Wall segments remain independent floor objects; they are
+not silently attached to, created for, or moved with rooms. Crowded rooms may have
+overlapping device markers, but their contents list keeps every item accessible.
 
 The UI uses shadcn/ui components with Radix primitives and Lucide icons. Its quiet
 toolbar/property-panel layout takes inspiration from established productivity
@@ -103,17 +120,22 @@ the running application does not need Google Fonts or a CDN.
 
 ### Manual UI regression checklist
 
-1. Select Room 101, add a sensor, then enter `9999` in Device x and `-9999` in
-   Device y. Its marker must remain fully inside Room 101. Drag it towards Room 102:
-   it must stay in Room 101, and Assigned room must remain unchanged.
-2. Change Assigned room to Room 102. The marker must move to its centre. Try
-   dragging and arrow keys past every boundary; it must remain in Room 102.
-3. Move and resize Room 102. Its sensor must move with it and stay contained.
-   Try a 1-unit room dimension: the marker must scale down to fit. Undo this test
-   with Reset hotel before evaluating the normal demonstration.
-4. Select Lobby and add a gateway. Try out-of-range coordinates and dragging;
-   it must stay in Lobby. Explicitly assign it to Reception, then move/resize
-   Reception. Remove that area and confirm its assigned gateway is removed too.
+1. Open http://127.0.0.1:8000 and press Ctrl+F5. Click Room 101; its Contents
+   list must show only its own devices. Add/remove a temperature and a leak sensor
+   there without switching tabs. Click a listed item to inspect its details.
+2. Drag Room 101 over Room 102, the lobby, then reception. Other rooms must
+   rearrange without overlap; every area's sensors/gateways/reception must follow
+   its own area. Drag from a locked sensor/gateway/reception: the whole area moves.
+   Press Escape during a move and confirm the entire original layout returns.
+3. Unlock individual placement, select a sensor and enter `9999` in Content x
+   and `-9999` in Content y. It must stay inside its assigned room. Drag towards
+   another room and try arrow keys: it cannot change rooms. Explicitly change
+   Assigned room, then confirm the marker transferred and placement locked again.
+4. Resize Room 102 through Position & size, including a 1-unit dimension. Its
+   contents must fit and neighbours adjust. Select Lobby and add a gateway; repeat
+   boundary/reassignment tests for it and reception. Delete reception's area:
+   assigned sensors/gateways disappear and required reception moves safely.
+   Reset hotel before the normal demonstration; test desktop and narrow widths.
 5. Generate a design with Ollama. Check its provenance, positions, heatmap and
    simulator metrics. Test the weak deployment, optimize, disable the gateway,
    and test backup recovery. Confirm the failed original remains offline.
@@ -141,7 +163,11 @@ backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --
 
 For frontend hot reload, use a second terminal: `cd frontend` then `npm run dev`.
 Open http://127.0.0.1:3000; `/api` is proxied to FastAPI on 8000.
-`npm test` runs the placement regressions; `npm run lint` runs strict TypeScript checks. VS Code C++ configurations remain
+`npm test` runs placement, collision and React event regressions, plus real C++
+editor integration when a compiled simulator is available (otherwise those three
+tests explicitly skip; set `IOTFORGE_SIMULATOR` to its path if needed). React event
+tests use jsdom and explicit API doubles; they are not browser visual acceptance
+or evidence of real AI metrics. `npm run lint` runs strict TypeScript checks. VS Code C++ configurations remain
 inside `simulator/.vscode/`: from the initialized developer terminal,
 `cd simulator` then `code .`. Debug tasks target the Debug executable and symbols.
 

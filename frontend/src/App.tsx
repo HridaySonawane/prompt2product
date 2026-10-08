@@ -14,11 +14,15 @@ import type {
 import {
   availablePosition,
   bindGateways,
+  bindReception,
   constrainLayout,
   markerSize,
   moveRoom,
   reassignSensor,
+  prepareLayout,
+  removeArea,
 } from "./editor";
+import { clientToFloor } from "./room_layout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,17 +52,18 @@ import {
   WandSparkles,
   Wifi,
   X,
+  LockKeyhole,
+  UnlockKeyhole,
+  Trash2,
+  Thermometer,
+  Droplets,
 } from "lucide-react";
 
-const api = import.meta.env.VITE_IOTFORGE_API_URL ?? "";
+const api = import.meta.env?.VITE_IOTFORGE_API_URL ?? "";
 const copy = <T,>(value: T): T => structuredClone(value);
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
 const latency = (value: number | null) =>
   value === null ? "Undefined" : `${value.toFixed(0)} ms`;
-const center = (room: Room) => ({
-  x: room.x + room.width / 2,
-  y: room.y + room.height / 2,
-});
 const uid = (prefix: string) => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 const initial = copy(hotel) as Layout;
 constrainLayout(initial, bindGateways(initial));
@@ -66,7 +71,20 @@ constrainLayout(initial, bindGateways(initial));
 export default function App() {
   const [layout, setLayout] = useState<Layout>(copy(initial));
   const gatewayRooms = useRef(bindGateways(initial));
-  const roomDrag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const receptionRoom = useRef(bindReception(initial));
+  const [editContents, setEditContents] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const gesture = useRef<{
+    pointerId: number;
+    id: string;
+    mode: "room" | "content";
+    dx: number;
+    dy: number;
+    clientX: number;
+    clientY: number;
+    layout: Layout;
+    moved: boolean;
+  } | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [selected, setSelected] = useState("room_101");
   const [tab, setTab] = useState<"rooms" | "devices" | "walls" | "settings">(
@@ -95,15 +113,54 @@ export default function App() {
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [failureId, setFailureId] = useState("gateway_1");
   const svg = useRef<SVGSVGElement>(null);
-  const room = layout.rooms.find((item) => item.id === selected);
   const device = layout.devices.find((item) => item.id === selected);
   const gateway = layout.gateways.find((item) => item.id === selected);
+  const room =
+    layout.rooms.find((item) => item.id === selected) ??
+    layout.rooms.find(
+      (item) =>
+        item.id ===
+        (device?.room_id ??
+          gatewayRooms.current[selected] ??
+          (selected === layout.reception.id ? receptionRoom.current : "")),
+    );
   const wall = layout.walls.find((item) => item.id === selected);
   const selectedFailureId = layout.gateways.some(
     (item) => item.id === failureId,
   )
     ? failureId
     : (layout.gateways[0]?.id ?? "");
+  const areaContents = room
+    ? [
+        ...layout.devices
+          .filter((item) => item.room_id === room.id)
+          .map((item) => ({
+            ...item,
+            kind: "sensor",
+            label:
+              item.type === "leak_sensor"
+                ? "Water leak sensor"
+                : "Temperature sensor",
+          })),
+        ...layout.gateways
+          .filter((item) => gatewayRooms.current[item.id] === room.id)
+          .map((item) => ({
+            ...item,
+            kind: "gateway",
+            label: item.active ? "Gateway · online" : "Gateway · offline",
+          })),
+        ...(receptionRoom.current === room.id
+          ? [
+              {
+                ...layout.reception,
+                kind: "reception",
+                label: "Reception desk",
+              },
+            ]
+          : []),
+      ]
+    : [];
+  const content = areaContents.find((item) => item.id === selected);
 
   useEffect(() => {
     let active = true;
@@ -137,14 +194,44 @@ export default function App() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    const blur = () => cancelDrag();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && gesture.current) {
+        event.preventDefault();
+        cancelDrag();
+      }
+    };
+    window.addEventListener("blur", blur);
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("keydown", escape);
+    };
+  }, []);
 
   function edit(change: (draft: Layout) => void) {
-    if (busy) return;
-    setLayout((previous) => {
-      const next = copy(previous);
+    if (busy || dragging) return false;
+    const previousBindings = { ...gatewayRooms.current };
+    const previousReception = receptionRoom.current;
+    try {
+      const next = copy(layout);
       change(next);
-      return constrainLayout(next, gatewayRooms.current);
-    });
+      setLayout(
+        constrainLayout(next, gatewayRooms.current, receptionRoom.current),
+      );
+    } catch (cause) {
+      gatewayRooms.current = previousBindings;
+      receptionRoom.current = previousReception;
+      setError(
+        cause instanceof Error ? cause.message : "Cannot edit this layout",
+      );
+      return false;
+    }
+    invalidateResults();
+    return true;
+  }
+  function invalidateResults() {
     setResult(null);
     setComparison(null);
     setPlanner(null);
@@ -152,8 +239,12 @@ export default function App() {
     setNotice("Layout changed · simulate to refresh results.");
   }
   function load(value: Layout, bindings = bindGateways(value)) {
+    const receptionId = bindReception(value);
+    const prepared = prepareLayout(value, bindings, receptionId);
     gatewayRooms.current = bindings;
-    setLayout(constrainLayout(copy(value), gatewayRooms.current));
+    receptionRoom.current = receptionId;
+    setEditContents(false);
+    setLayout(prepared);
     setResult(null);
     setError("");
     setSelected(value.rooms[0]?.id ?? "");
@@ -164,7 +255,15 @@ export default function App() {
   }
   function updateRoom(patch: Partial<Room>) {
     if (!room) return;
-    edit((draft) => moveRoom(draft, room.id, patch, gatewayRooms.current));
+    edit((draft) =>
+      moveRoom(
+        draft,
+        room.id,
+        patch,
+        gatewayRooms.current,
+        receptionRoom.current,
+      ),
+    );
   }
   function addRoom() {
     const next: Room = {
@@ -176,10 +275,11 @@ export default function App() {
       width: 180,
       height: 140,
     };
-    edit((draft) => {
+    const added = edit((draft) => {
       draft.rooms.push(next);
-      moveRoom(draft, next.id, {}, gatewayRooms.current);
+      moveRoom(draft, next.id, {}, gatewayRooms.current, receptionRoom.current);
     });
+    if (!added) return;
     setSelected(next.id);
     setTab("rooms");
   }
@@ -204,11 +304,12 @@ export default function App() {
       ...availablePosition(layout, target),
       room_id: target.id,
     };
-    edit((draft) => {
+    const added = edit((draft) => {
       draft.devices.push(sensor);
     });
+    if (!added) return;
     setSelected(sensor.id);
-    setTab("devices");
+    setTab("rooms");
   }
   function addGateway() {
     if (layout.gateways.length >= 2) return;
@@ -230,56 +331,230 @@ export default function App() {
       ...availablePosition(layout, target),
       active: true,
     };
-    gatewayRooms.current[next.id] = target.id;
-    edit((draft) => {
+    const added = edit((draft) => {
+      gatewayRooms.current[next.id] = target.id;
       draft.gateways.push(next);
     });
+    if (!added) return;
     setSelected(next.id);
-    setTab("devices");
+    setTab("rooms");
   }
-  function removeSelected() {
-    edit((draft) => {
-      draft.rooms = draft.rooms.filter((item) => item.id !== selected);
-      draft.devices = draft.devices.filter(
-        (item) => item.id !== selected && item.room_id !== selected,
-      );
-      draft.gateways = draft.gateways.filter(
-        (item) =>
-          item.id !== selected && gatewayRooms.current[item.id] !== selected,
-      );
-      draft.walls = draft.walls.filter((item) => item.id !== selected);
+  function removeContent(id: string) {
+    const removed = edit((draft) => {
+      draft.devices = draft.devices.filter((item) => item.id !== id);
+      draft.gateways = draft.gateways.filter((item) => item.id !== id);
     });
-    setSelected("");
+    if (removed && selected === id) setSelected(room?.id ?? "");
   }
-  function position(event: React.PointerEvent<SVGElement>) {
-    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(
-      svg.current!.getScreenCTM()!.inverse(),
+  function removeSelected(areaId?: string) {
+    const id = areaId ?? selected;
+    const removed = edit((draft) => {
+      if (draft.rooms.some((item) => item.id === id))
+        receptionRoom.current = removeArea(
+          draft,
+          id,
+          gatewayRooms.current,
+          receptionRoom.current,
+        );
+      else {
+        draft.devices = draft.devices.filter((item) => item.id !== id);
+        draft.gateways = draft.gateways.filter((item) => item.id !== id);
+        draft.walls = draft.walls.filter((item) => item.id !== id);
+      }
+    });
+    if (removed)
+      setSelected(layout.rooms.find((item) => item.id !== id)?.id ?? "");
+  }
+  function position(event: { clientX: number; clientY: number }) {
+    return clientToFloor(
+      { x: event.clientX, y: event.clientY },
+      svg.current!.getBoundingClientRect(),
+      layout.floor,
     );
-    return {
-      x: Math.round(Math.max(0, Math.min(layout.floor.width, point.x))),
-      y: Math.round(Math.max(0, Math.min(layout.floor.height, point.y))),
-    };
   }
-  function drag(
+  function startDrag(
     event: React.PointerEvent<SVGElement>,
     id: string,
-    kind: "sensor" | "gateway",
+    mode: "room" | "content",
   ) {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    if (busy || gesture.current || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
     const point = position(event);
-    edit((draft) => {
-      const target =
-        kind === "sensor"
-          ? draft.devices.find((item) => item.id === id)
-          : draft.gateways.find((item) => item.id === id);
-      if (!target) return;
-      Object.assign(target, point);
-    });
+    const target =
+      mode === "room"
+        ? layout.rooms.find((item) => item.id === id)
+        : [...layout.devices, ...layout.gateways, layout.reception].find(
+            (item) => item.id === id,
+          );
+    if (!target) return;
+    gesture.current = {
+      pointerId: event.pointerId,
+      id,
+      mode,
+      dx: point.x - target.x,
+      dy: point.y - target.y,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      layout: copy(layout),
+      moved: false,
+    };
+    svg.current!.setPointerCapture(event.pointerId);
+    setDragging(true);
+    setTab("rooms");
   }
-  function moveMarkerByKey(event: React.KeyboardEvent<SVGElement>, id: string) {
-    if (event.key === "Enter") {
+  function moveDrag(event: React.PointerEvent<SVGSVGElement>) {
+    const start = gesture.current;
+    if (!start || event.pointerId !== start.pointerId) return;
+    // Clicking to inspect must not round fractional positions or invalidate results.
+    if (
+      !start.moved &&
+      Math.hypot(event.clientX - start.clientX, event.clientY - start.clientY) <
+        2
+    )
+      return;
+    const point = position(event),
+      target = copy(start.layout);
+    const desired = {
+      x: Math.round(point.x - start.dx),
+      y: Math.round(point.y - start.dy),
+    };
+    try {
+      if (start.mode === "room")
+        moveRoom(
+          target,
+          start.id,
+          desired,
+          gatewayRooms.current,
+          receptionRoom.current,
+        );
+      else
+        Object.assign(
+          [...target.devices, ...target.gateways, target.reception].find(
+            (item) => item.id === start.id,
+          )!,
+          desired,
+        );
+      constrainLayout(target, gatewayRooms.current, receptionRoom.current);
+      if (JSON.stringify(target) === JSON.stringify(layout)) return;
+      start.moved = true;
+      setLayout(target);
+      invalidateResults();
+      setNotice(
+        start.mode === "room"
+          ? "Room moved · neighbouring areas and their contents adjusted automatically."
+          : "Device positioned inside its assigned area.",
+      );
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error ? cause.message : "Cannot place this room here",
+      );
+    }
+  }
+  function finishDrag(
+    event: React.PointerEvent<SVGSVGElement>,
+    cancel = false,
+  ) {
+    const start = gesture.current;
+    if (!start || event.pointerId !== start.pointerId) return;
+    if (cancel && start.moved) {
+      setLayout(copy(start.layout));
+      setNotice("Move cancelled · layout restored.");
+    }
+    gesture.current = null;
+    setDragging(false);
+    if (svg.current?.hasPointerCapture(event.pointerId))
+      svg.current.releasePointerCapture(event.pointerId);
+  }
+  function cancelDrag() {
+    const start = gesture.current;
+    if (!start) return;
+    gesture.current = null;
+    setDragging(false);
+    if (start.moved) {
+      setLayout(copy(start.layout));
+      setNotice("Move cancelled · layout restored.");
+    }
+    if (svg.current?.hasPointerCapture(start.pointerId))
+      svg.current.releasePointerCapture(start.pointerId);
+  }
+  function selectRoom(id: string) {
+    setSelected(id);
+    setTab("rooms");
+    setEditContents(false);
+  }
+  function startMarkerDrag(
+    event: React.PointerEvent<SVGElement>,
+    id: string,
+    areaId: string,
+  ) {
+    setSelected(id);
+    setTab("rooms");
+    const unlocked = editContents && room?.id === areaId;
+    if (room?.id !== areaId) setEditContents(false);
+    startDrag(event, unlocked ? id : areaId, unlocked ? "content" : "room");
+  }
+  function markerProps(id: string, areaId: string) {
+    return {
+      role: "button" as const,
+      tabIndex: 0,
+      "aria-label": `Select ${id}`,
+      "data-device-id": id,
+      "data-room-id": areaId,
+      onKeyDown: (event: React.KeyboardEvent<SVGElement>) =>
+        moveMarkerByKey(event, id, areaId),
+      onPointerDown: (event: React.PointerEvent<SVGElement>) =>
+        startMarkerDrag(event, id, areaId),
+      onClick: () => {
+        if (room?.id !== areaId) setEditContents(false);
+        setSelected(id);
+        setTab("rooms");
+      },
+    };
+  }
+  function assignReception(areaId: string) {
+    const area = layout.rooms.find((item) => item.id === areaId);
+    if (!area) return;
+    const assigned = edit((draft) => {
+      receptionRoom.current = areaId;
+      Object.assign(draft.reception, availablePosition(draft, area));
+    });
+    if (!assigned) return;
+    setSelected(areaId);
+    setTab("rooms");
+    setEditContents(false);
+  }
+  function assignContent(id: string, areaId: string) {
+    if (id === layout.reception.id) {
+      assignReception(areaId);
+      return;
+    }
+    const area = layout.rooms.find((item) => item.id === areaId);
+    if (!area) return;
+    edit((draft) => {
+      if (draft.devices.some((item) => item.id === id))
+        reassignSensor(draft, id, areaId);
+      else {
+        gatewayRooms.current[id] = areaId;
+        Object.assign(
+          draft.gateways.find((item) => item.id === id)!,
+          availablePosition(draft, area),
+        );
+      }
+    });
+    setEditContents(false);
+  }
+  function moveMarkerByKey(
+    event: React.KeyboardEvent<SVGElement>,
+    id: string,
+    areaId: string,
+    isRoom = false,
+  ) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (isRoom || room?.id !== areaId) setEditContents(false);
       setSelected(id);
-      setTab("devices");
+      setTab("rooms");
       return;
     }
     const delta: Record<string, [number, number]> = {
@@ -291,14 +566,30 @@ export default function App() {
     if (!delta[event.key]) return;
     event.preventDefault();
     setSelected(id);
-    setTab("devices");
+    setTab("rooms");
     edit((draft) => {
-      const item = [...draft.devices, ...draft.gateways].find(
-        (item) => item.id === id,
-      )!;
       const step = event.shiftKey ? 10 : 1;
-      item.x += delta[event.key][0] * step;
-      item.y += delta[event.key][1] * step;
+      if (isRoom || !editContents) {
+        const target = draft.rooms.find((item) => item.id === areaId)!;
+        moveRoom(
+          draft,
+          areaId,
+          {
+            x: target.x + delta[event.key][0] * step,
+            y: target.y + delta[event.key][1] * step,
+          },
+          gatewayRooms.current,
+          receptionRoom.current,
+        );
+      } else {
+        const item = [
+          ...draft.devices,
+          ...draft.gateways,
+          draft.reception,
+        ].find((item) => item.id === id)!;
+        item.x += delta[event.key][0] * step;
+        item.y += delta[event.key][1] * step;
+      }
     });
   }
   async function simulate() {
@@ -361,6 +652,8 @@ export default function App() {
       if (!nextResult)
         throw new Error("Simulation result missing from response");
       gatewayRooms.current = bindGateways(value.layout);
+      receptionRoom.current = bindReception(value.layout);
+      setEditContents(false);
       setLayout(value.layout);
       setResult(nextResult);
       setPlanner(value.planner);
@@ -437,7 +730,7 @@ export default function App() {
       if (!response.ok || validated.status !== "ok")
         throw new Error(validated.error?.message ?? "Invalid layout");
       const bindings = bindGateways(value);
-      const prepared = constrainLayout(copy(value), bindings);
+      const prepared = prepareLayout(value, bindings, bindReception(value));
       if (JSON.stringify(prepared) !== JSON.stringify(value)) {
         const adjusted = await fetch(`${api}/api/simulate`, {
           method: "POST",
@@ -508,7 +801,7 @@ export default function App() {
             <Button
               variant="outline"
               size="sm"
-              disabled={busy}
+              disabled={busy || dragging}
               onClick={() => load(copy(weakHotel) as Layout)}
             >
               Weak deployment
@@ -518,14 +811,14 @@ export default function App() {
               size="icon-sm"
               aria-label="Reset hotel"
               title="Reset hotel"
-              disabled={busy}
+              disabled={busy || dragging}
               onClick={() => load(copy(hotel) as Layout)}
             >
               <RotateCcw />
             </Button>
             <Dialog open={planningOpen} onOpenChange={setPlanningOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" disabled={busy}>
+                <Button variant="outline" size="sm" disabled={busy || dragging}>
                   <WandSparkles />
                   Plan deployment
                 </Button>
@@ -562,7 +855,7 @@ export default function App() {
                   <textarea
                     id="requirements-prompt"
                     maxLength={4000}
-                    disabled={busy}
+                    disabled={busy || dragging}
                     value={prompt}
                     onChange={(event) => setPrompt(event.target.value)}
                   />
@@ -579,7 +872,7 @@ export default function App() {
                     Optimize placement
                   </Button>
                   <Button
-                    disabled={busy || !prompt.trim()}
+                    disabled={busy || dragging || !prompt.trim()}
                     onClick={() => void scenario("design")}
                   >
                     {busy ? <Loader2 className="animate-spin" /> : <Plus />}
@@ -597,7 +890,11 @@ export default function App() {
                 </p>
               </DialogContent>
             </Dialog>
-            <Button size="sm" onClick={() => void simulate()} disabled={busy}>
+            <Button
+              size="sm"
+              onClick={() => void simulate()}
+              disabled={busy || dragging}
+            >
               {busy ? <Loader2 className="animate-spin" /> : <Play />}
               {busy ? "Working…" : "Simulate network"}
             </Button>
@@ -703,7 +1000,7 @@ export default function App() {
                 <Button
                   variant="ghost"
                   size="xs"
-                  disabled={busy}
+                  disabled={busy || dragging}
                   onClick={addRoom}
                 >
                   <Plus />
@@ -712,7 +1009,7 @@ export default function App() {
                 <Button
                   variant="ghost"
                   size="xs"
-                  disabled={busy || !layout.rooms.length}
+                  disabled={busy || dragging || !layout.rooms.length}
                   onClick={() => addSensor("temperature_sensor")}
                 >
                   <Plus />
@@ -736,6 +1033,14 @@ export default function App() {
               className={`floor-plan ${showHeatmap && result ? "heatmap-visible" : ""}`}
               viewBox={`0 0 ${layout.floor.width} ${layout.floor.height}`}
               aria-label="Editable hotel floor plan"
+              data-testid="floor-plan"
+              onPointerMove={moveDrag}
+              onPointerUp={(event) => {
+                moveDrag(event);
+                finishDrag(event);
+              }}
+              onPointerCancel={(event) => finishDrag(event, true)}
+              onLostPointerCapture={(event) => finishDrag(event, true)}
             >
               <defs>
                 <pattern
@@ -796,50 +1101,19 @@ export default function App() {
                   role="button"
                   tabIndex={0}
                   aria-label={`Select area ${item.name}`}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      setSelected(item.id);
-                      setTab("rooms");
-                    }
-                  }}
+                  data-testid={`room-${item.id}`}
+                  data-room-id={item.id}
+                  data-x={item.x}
+                  data-y={item.y}
+                  data-width={item.width}
+                  data-height={item.height}
+                  onKeyDown={(event) =>
+                    moveMarkerByKey(event, item.id, item.id, true)
+                  }
+                  onClick={() => selectRoom(item.id)}
                   onPointerDown={(event) => {
-                    if (busy) return;
-                    const point = position(event);
-                    roomDrag.current = {
-                      id: item.id,
-                      dx: point.x - item.x,
-                      dy: point.y - item.y,
-                    };
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    setSelected(item.id);
-                    setTab("rooms");
-                  }}
-                  onPointerMove={(event) => {
-                    if (
-                      !event.currentTarget.hasPointerCapture(event.pointerId) ||
-                      !roomDrag.current
-                    )
-                      return;
-                    const point = position(event),
-                      start = roomDrag.current;
-                    edit((draft) =>
-                      moveRoom(
-                        draft,
-                        item.id,
-                        { x: point.x - start.dx, y: point.y - start.dy },
-                        gatewayRooms.current,
-                      ),
-                    );
-                  }}
-                  onPointerUp={(event) => {
-                    roomDrag.current = null;
-                    if (event.currentTarget.hasPointerCapture(event.pointerId))
-                      event.currentTarget.releasePointerCapture(
-                        event.pointerId,
-                      );
-                  }}
-                  onPointerCancel={() => {
-                    roomDrag.current = null;
+                    selectRoom(item.id);
+                    startDrag(event, item.id, "room");
                   }}
                 >
                   <defs>
@@ -858,7 +1132,7 @@ export default function App() {
                     width={item.width}
                     height={item.height}
                     rx="3"
-                    className={`room-${item.type} ${selected === item.id ? "selected" : ""}`}
+                    className={`room-${item.type} ${room?.id === item.id ? "selected" : ""}`}
                   />
                   <g clipPath={`url(#room-clip-${index})`}>
                     <text
@@ -918,61 +1192,46 @@ export default function App() {
                   <title>{item.material} wall</title>
                 </line>
               ))}
-              <g className="reception">
-                <rect
-                  x={layout.reception.x - 13}
-                  y={layout.reception.y - 13}
-                  width="26"
-                  height="26"
-                  rx="5"
-                />
-                <text
-                  x={layout.reception.x}
-                  y={layout.reception.y + 4}
-                  textAnchor="middle"
-                >
+              <g
+                className={`reception marker ${editContents ? "unlocked" : "locked"}`}
+                {...markerProps(layout.reception.id, receptionRoom.current)}
+                data-x={layout.reception.x}
+                data-y={layout.reception.y}
+                transform={`translate(${layout.reception.x} ${layout.reception.y}) scale(${
+                  markerSize(
+                    layout.rooms.find(
+                      (area) => area.id === receptionRoom.current,
+                    ),
+                    24,
+                  ) / 24
+                })`}
+              >
+                <rect x="-13" y="-13" width="26" height="26" rx="5" />
+                <text y="4" textAnchor="middle">
                   R
                 </text>
-                <text
-                  className="marker-caption"
-                  x={layout.reception.x}
-                  y={layout.reception.y + 30}
-                  textAnchor="middle"
-                >
-                  RECEPTION
-                </text>
+                <title>
+                  Reception ·{" "}
+                  {
+                    layout.rooms.find(
+                      (area) => area.id === receptionRoom.current,
+                    )?.name
+                  }
+                </title>
               </g>
               {layout.devices.map((item) => (
                 <g
                   key={item.id}
-                  className="marker"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Select ${item.id}`}
-                  data-device-id={item.id}
-                  data-room-id={item.room_id}
+                  className={`marker ${editContents ? "unlocked" : "locked"}`}
+                  {...markerProps(item.id, item.room_id)}
                   data-x={item.x}
                   data-y={item.y}
                   transform={`translate(${item.x} ${item.y}) scale(${
                     markerSize(
-                      layout.rooms.find((room) => room.id === item.room_id),
+                      layout.rooms.find((area) => area.id === item.room_id),
                       24,
                     ) / 24
                   })`}
-                  onKeyDown={(event) => moveMarkerByKey(event, item.id)}
-                  onPointerDown={(event) => {
-                    if (busy) return;
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    setSelected(item.id);
-                    setTab("devices");
-                  }}
-                  onPointerMove={(event) => drag(event, item.id, "sensor")}
-                  onPointerUp={(event) => {
-                    if (event.currentTarget.hasPointerCapture(event.pointerId))
-                      event.currentTarget.releasePointerCapture(
-                        event.pointerId,
-                      );
-                  }}
                 >
                   <circle
                     r={selected === item.id ? 21 : 18}
@@ -984,7 +1243,7 @@ export default function App() {
                   <title>
                     {item.id} ·{" "}
                     {
-                      layout.rooms.find((room) => room.id === item.room_id)
+                      layout.rooms.find((area) => area.id === item.room_id)
                         ?.name
                     }
                   </title>
@@ -993,36 +1252,18 @@ export default function App() {
               {layout.gateways.map((item, index) => (
                 <g
                   key={item.id}
-                  className="marker"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Select ${item.id}`}
-                  data-device-id={item.id}
-                  data-room-id={gatewayRooms.current[item.id]}
+                  className={`marker ${editContents ? "unlocked" : "locked"}`}
+                  {...markerProps(item.id, gatewayRooms.current[item.id])}
                   data-x={item.x}
                   data-y={item.y}
                   transform={`translate(${item.x} ${item.y}) scale(${
                     markerSize(
                       layout.rooms.find(
-                        (room) => room.id === gatewayRooms.current[item.id],
+                        (area) => area.id === gatewayRooms.current[item.id],
                       ),
                       24,
                     ) / 24
                   })`}
-                  onKeyDown={(event) => moveMarkerByKey(event, item.id)}
-                  onPointerDown={(event) => {
-                    if (busy) return;
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    setSelected(item.id);
-                    setTab("devices");
-                  }}
-                  onPointerMove={(event) => drag(event, item.id, "gateway")}
-                  onPointerUp={(event) => {
-                    if (event.currentTarget.hasPointerCapture(event.pointerId))
-                      event.currentTarget.releasePointerCapture(
-                        event.pointerId,
-                      );
-                  }}
                 >
                   <rect
                     x="-20"
@@ -1095,17 +1336,44 @@ export default function App() {
                   ),
                 )}
               </TabsList>
+              <div className="placement-lock">
+                <label>
+                  <Switch
+                    aria-label="Unlock individual placement"
+                    disabled={busy || dragging}
+                    checked={editContents}
+                    onCheckedChange={setEditContents}
+                  />
+                  {editContents ? (
+                    <UnlockKeyhole size={13} />
+                  ) : (
+                    <LockKeyhole size={13} />
+                  )}
+                  <span>
+                    {editContents
+                      ? "Individual placement unlocked"
+                      : "Room contents locked"}
+                  </span>
+                </label>
+              </div>
               <TabsContent value={tab}>
-                <fieldset disabled={busy} className="inspector-content">
+                <fieldset
+                  disabled={busy || dragging}
+                  className="inspector-content"
+                >
                   {tab === "rooms" && (
                     <>
                       <div className="section-label">
-                        AREAS <button onClick={addRoom}>＋ Add</button>
+                        AREAS{" "}
+                        <Button variant="ghost" size="xs" onClick={addRoom}>
+                          <Plus />
+                          Add area
+                        </Button>
                       </div>
                       <select
                         aria-label="Selected room"
                         value={room?.id ?? ""}
-                        onChange={(event) => setSelected(event.target.value)}
+                        onChange={(event) => selectRoom(event.target.value)}
                       >
                         <option value="" disabled>
                           Select an area
@@ -1118,62 +1386,259 @@ export default function App() {
                       </select>
                       {room && (
                         <>
-                          <label>
-                            Name
-                            <input
-                              value={room.name}
-                              onChange={(event) =>
-                                updateRoom({ name: event.target.value })
-                              }
-                            />
-                          </label>
-                          <label>
-                            Type
-                            <select
-                              value={room.type}
-                              onChange={(event) =>
-                                updateRoom({
-                                  type: event.target.value as RoomKind,
-                                })
-                              }
-                            >
-                              {["room", "lobby", "bathroom", "reception"].map(
-                                (type) => (
-                                  <option key={type}>{type}</option>
+                          <div className="fields">
+                            <label>
+                              Name
+                              <input
+                                aria-label="Room name"
+                                value={room.name}
+                                onChange={(event) =>
+                                  updateRoom({ name: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label>
+                              Type
+                              <select
+                                aria-label="Room type"
+                                value={room.type}
+                                onChange={(event) =>
+                                  updateRoom({
+                                    type: event.target.value as RoomKind,
+                                  })
+                                }
+                              >
+                                {["room", "lobby", "bathroom", "reception"].map(
+                                  (type) => (
+                                    <option key={type}>{type}</option>
+                                  ),
+                                )}
+                              </select>
+                            </label>
+                          </div>
+                          <section
+                            className="room-contents"
+                            aria-label={`Contents of ${room.name}`}
+                          >
+                            <div className="section-label">
+                              CONTENTS <span>{areaContents.length}</span>
+                            </div>
+                            <div className="contents-add">
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={() => addSensor("temperature_sensor")}
+                              >
+                                <Thermometer />
+                                Temperature
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={() => addSensor("leak_sensor")}
+                              >
+                                <Droplets />
+                                Leak
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                disabled={layout.gateways.length >= 2}
+                                onClick={addGateway}
+                              >
+                                <Wifi />
+                                Gateway
+                              </Button>
+                            </div>
+                            <div className="contents-list">
+                              {areaContents.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className={`content-row ${selected === item.id ? "selected" : ""}`}
+                                >
+                                  <button
+                                    className="content-select"
+                                    aria-label={`Inspect ${item.id}`}
+                                    onClick={() => {
+                                      setSelected(item.id);
+                                      setTab("rooms");
+                                    }}
+                                  >
+                                    {item.kind === "gateway" ? (
+                                      <Wifi size={14} />
+                                    ) : item.kind === "reception" ? (
+                                      <Box size={14} />
+                                    ) : item.label.startsWith("Water") ? (
+                                      <Droplets size={14} />
+                                    ) : (
+                                      <Thermometer size={14} />
+                                    )}
+                                    <span>
+                                      <b>{item.label}</b>
+                                      <small title={item.id}>{item.id}</small>
+                                    </span>
+                                  </button>
+                                  {item.kind !== "reception" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      aria-label={`Remove ${item.id}`}
+                                      title="Remove from room"
+                                      onClick={() => removeContent(item.id)}
+                                    >
+                                      <Trash2 />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {!areaContents.length && (
+                              <p className="contents-empty">
+                                No devices in this area. Add a sensor or gateway
+                                above.
+                              </p>
+                            )}
+                            {receptionRoom.current !== room.id && (
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                className="reception-action"
+                                onClick={() => assignReception(room.id)}
+                              >
+                                Move reception here
+                              </Button>
+                            )}
+                            {content && (
+                              <div
+                                className="content-detail"
+                                aria-label={`Details of ${content.id}`}
+                              >
+                                <b>{content.label}</b>
+                                <span className="content-position">
+                                  Position: {content.x.toFixed(1)},{" "}
+                                  {content.y.toFixed(1)}
+                                </span>
+                                <label>
+                                  Assigned room
+                                  <select
+                                    aria-label="Content assigned room"
+                                    value={room.id}
+                                    onChange={(event) =>
+                                      assignContent(
+                                        content.id,
+                                        event.target.value,
+                                      )
+                                    }
+                                  >
+                                    {layout.rooms.map((item) => (
+                                      <option key={item.id} value={item.id}>
+                                        {item.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <div className="fields">
+                                  <NumberField
+                                    label="Content x"
+                                    disabled={!editContents}
+                                    value={content.x}
+                                    onChange={(value) =>
+                                      edit((draft) => {
+                                        Object.assign(
+                                          [
+                                            ...draft.devices,
+                                            ...draft.gateways,
+                                            draft.reception,
+                                          ].find(
+                                            (item) => item.id === content.id,
+                                          )!,
+                                          { x: value },
+                                        );
+                                      })
+                                    }
+                                  />
+                                  <NumberField
+                                    label="Content y"
+                                    disabled={!editContents}
+                                    value={content.y}
+                                    onChange={(value) =>
+                                      edit((draft) => {
+                                        Object.assign(
+                                          [
+                                            ...draft.devices,
+                                            ...draft.gateways,
+                                            draft.reception,
+                                          ].find(
+                                            (item) => item.id === content.id,
+                                          )!,
+                                          { y: value },
+                                        );
+                                      })
+                                    }
+                                  />
+                                </div>
+                                {gateway && (
+                                  <label className="toggle">
+                                    <Switch
+                                      aria-label="Selected gateway active"
+                                      checked={gateway.active}
+                                      onCheckedChange={(checked) =>
+                                        edit((draft) => {
+                                          draft.gateways.find(
+                                            (item) => item.id === gateway.id,
+                                          )!.active = checked;
+                                        })
+                                      }
+                                    />
+                                    Gateway active
+                                  </label>
+                                )}
+                                {content.kind === "reception" && (
+                                  <p className="help">
+                                    One reception is required. Use Assigned room
+                                    to move it to another area.
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </section>
+                          <details className="room-dimensions">
+                            <summary>Position &amp; size</summary>
+                            <div className="fields">
+                              {(["x", "y", "width", "height"] as const).map(
+                                (key) => (
+                                  <NumberField
+                                    key={key}
+                                    label={`Room ${key}`}
+                                    value={room[key]}
+                                    min={
+                                      key === "width" || key === "height"
+                                        ? 1
+                                        : 0
+                                    }
+                                    onChange={(value) =>
+                                      updateRoom({ [key]: value })
+                                    }
+                                  />
                                 ),
                               )}
-                            </select>
-                          </label>
-                          <div className="fields">
-                            {(["x", "y", "width", "height"] as const).map(
-                              (key) => (
-                                <NumberField
-                                  key={key}
-                                  label={`Room ${key}`}
-                                  value={room[key]}
-                                  min={
-                                    key === "width" || key === "height" ? 1 : 0
-                                  }
-                                  onChange={(value) =>
-                                    updateRoom({ [key]: value })
-                                  }
-                                />
-                              ),
-                            )}
-                          </div>
+                            </div>
+                          </details>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="remove-button"
-                            onClick={removeSelected}
+                            disabled={layout.rooms.length <= 1}
+                            onClick={() => removeSelected(room.id)}
                           >
-                            Remove area & its devices
+                            Remove area &amp; its devices
                           </Button>
                         </>
                       )}
                       <p className="help">
-                        Drag an area to move it. Its devices follow and stay
-                        within its boundaries.
+                        Drag a room or its locked contents to move the whole
+                        area. Neighbours adjust automatically. Unlock individual
+                        placement to reposition a device inside its room.
                       </p>
                     </>
                   )}
@@ -1223,6 +1688,7 @@ export default function App() {
                           <div className="fields">
                             <NumberField
                               label="Device x"
+                              disabled={!editContents}
                               value={(device ?? gateway)!.x}
                               onChange={(value) =>
                                 edit((draft) => {
@@ -1237,6 +1703,7 @@ export default function App() {
                             />
                             <NumberField
                               label="Device y"
+                              disabled={!editContents}
                               value={(device ?? gateway)!.y}
                               onChange={(value) =>
                                 edit((draft) => {
@@ -1256,13 +1723,7 @@ export default function App() {
                               <select
                                 value={device.room_id}
                                 onChange={(event) =>
-                                  edit((draft) =>
-                                    reassignSensor(
-                                      draft,
-                                      selected,
-                                      event.target.value,
-                                    ),
-                                  )
+                                  assignContent(selected, event.target.value)
                                 }
                               >
                                 {layout.rooms.map((item) => (
@@ -1279,21 +1740,9 @@ export default function App() {
                                 Assigned room
                                 <select
                                   value={gatewayRooms.current[gateway.id] ?? ""}
-                                  onChange={(event) => {
-                                    const target = layout.rooms.find(
-                                      (item) => item.id === event.target.value,
-                                    )!;
-                                    gatewayRooms.current[gateway.id] =
-                                      target.id;
-                                    edit((draft) =>
-                                      Object.assign(
-                                        draft.gateways.find(
-                                          (item) => item.id === selected,
-                                        )!,
-                                        center(target),
-                                      ),
-                                    );
-                                  }}
+                                  onChange={(event) =>
+                                    assignContent(selected, event.target.value)
+                                  }
                                 >
                                   {layout.rooms.map((item) => (
                                     <option key={item.id} value={item.id}>
@@ -1319,7 +1768,7 @@ export default function App() {
                           )}
                           <button
                             className="text-button danger"
-                            onClick={removeSelected}
+                            onClick={() => removeSelected()}
                           >
                             Remove device
                           </button>
@@ -1407,7 +1856,7 @@ export default function App() {
                           </div>
                           <button
                             className="text-button danger"
-                            onClick={removeSelected}
+                            onClick={() => removeSelected()}
                           >
                             Remove wall
                           </button>
@@ -1481,6 +1930,7 @@ export default function App() {
                       <div className="fields">
                         <NumberField
                           label="Reception x"
+                          disabled={!editContents}
                           value={layout.reception.x}
                           onChange={(value) =>
                             edit((draft) => {
@@ -1490,6 +1940,7 @@ export default function App() {
                         />
                         <NumberField
                           label="Reception y"
+                          disabled={!editContents}
                           value={layout.reception.y}
                           onChange={(value) =>
                             edit((draft) => {
@@ -1521,7 +1972,7 @@ export default function App() {
           <div className="resilience-controls">
             <select
               aria-label="Gateway to fail"
-              disabled={busy}
+              disabled={busy || dragging}
               value={selectedFailureId}
               onChange={(event) => setFailureId(event.target.value)}
             >
@@ -1778,7 +2229,10 @@ export default function App() {
                   <Download />
                   Download layout
                 </Button>
-                <Button disabled={busy} onClick={() => void importJson()}>
+                <Button
+                  disabled={busy || dragging}
+                  onClick={() => void importJson()}
+                >
                   Validate & load JSON
                 </Button>
               </div>
@@ -1833,6 +2287,7 @@ function NumberField({
   min,
   max,
   step = 1,
+  disabled = false,
 }: {
   label: string;
   value: number;
@@ -1840,12 +2295,14 @@ function NumberField({
   min?: number;
   max?: number;
   step?: number;
+  disabled?: boolean;
 }) {
   return (
     <label>
       {label}
       <input
         type="number"
+        disabled={disabled}
         value={Number(value.toFixed(3))}
         min={min}
         max={max}
