@@ -1,5 +1,11 @@
 # Final acceptance evidence
 
+> **Latest UI revision:** see [UI-POLISH.md](UI-POLISH.md). The historical browser
+> evidence below covers commit `16a3aca`, before the workspace redesign. The new
+> automated checks passed, but browser access to the revised UI was blocked by a
+> saved browser permission. Do not treat the old screenshots or browser counts
+> as visual acceptance of the new revision.
+
 CHECKPOINT: CP10 (final scope across CP00-10)
 
 STATUS: COMPONENT PASSED

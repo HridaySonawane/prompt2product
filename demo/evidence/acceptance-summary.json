@@ -1,12 +1,13 @@
 {
   "date": "2026-10-08",
+  "revision": "workspace-polish-and-room-containment",
   "environment": "Windows x64, MSVC 19.44 NMake Debug/Release, Python 3.11, Node 22, Vite 7.3.7",
   "cpp_ctest_debug": "3/3 passed",
   "cpp_ctest_release": "3/3 passed",
-  "cpp_geometry_contract_checks": 123,
-  "cpp_network_grid_checks": 25,
-  "backend_tests": "30/30 passed",
-  "frontend_build": "passed",
+  "backend_tests": "33/33 passed",
+  "frontend_placement_tests": "9/9 passed",
+  "frontend_clean_install": "npm ci passed",
+  "frontend_build": "strict TypeScript and Vite production build passed",
   "npm_audit_vulnerabilities": 0,
   "http_checks": "8/8 passed",
   "ai": {
@@ -16,7 +17,8 @@
     "model": "qwen2.5:1.5b",
     "message": "Local AI ready"
   },
-  "extracted_runtime_cold_start": "passed",
+  "extracted_runtime_api_workflows": "2/2 passed with real Ollama and Release C++ executable",
+  "production_asset_delivery": "passed",
   "workflows": [
     {
       "design_planner": {
@@ -29,7 +31,7 @@
         "source": "ollama",
         "model": "qwen2.5:1.5b",
         "warning": null,
-        "reasoning": "Moved the gateway closer to the sensor cluster, avoiding concrete barriers. This position maintains the sensor centroid while improving coverage and reliability."
+        "reasoning": "Moved the gateway closer to the sensor cluster, avoiding concrete barriers. This placement maintains the sensor centroid while improving coverage and reliability."
       },
       "weak_before": {
         "average_latency_ms": null,
@@ -65,7 +67,7 @@
         "worst_latency_ms": null
       },
       "recovery": {
-        "average_latency_ms": 54.225,
+        "average_latency_ms": 54.65833333333333,
         "coverage": 1.0,
         "delivered_messages": 1200,
         "generated_messages": 1200,
@@ -88,7 +90,7 @@
         "source": "ollama",
         "model": "qwen2.5:1.5b",
         "warning": null,
-        "reasoning": "Moved the gateway closer to the sensor cluster, avoiding concrete barriers. This position maintains the sensor centroid while improving coverage and reliability."
+        "reasoning": "Moved the gateway closer to the sensor cluster, avoiding concrete barriers. This placement maintains the sensor centroid while improving coverage and reliability."
       },
       "weak_before": {
         "average_latency_ms": null,
@@ -124,7 +126,7 @@
         "worst_latency_ms": null
       },
       "recovery": {
-        "average_latency_ms": 54.225,
+        "average_latency_ms": 54.65833333333333,
         "coverage": 1.0,
         "delivered_messages": 1200,
         "generated_messages": 1200,
@@ -137,23 +139,17 @@
       "recovered": true
     }
   ],
-  "runtime_cold_starts_passed": 2,
-  "post_second_cold_start_live_ai_workflows_passed": 2,
-  "complete_browser_workflows_passed": 2,
-  "browser_design_source": "ollama",
-  "browser_optimization_source": "ollama",
-  "browser_recovery": {
-    "coverage": 1.0,
-    "reliability": 1.0,
-    "worst_latency_ms": 310,
-    "requirements_pass": true,
-    "original_gateway_active": false,
-    "backup_gateway_active": true
+  "current_revision_browser_acceptance": "BLOCKED: saved browser permission rejected localhost navigation despite explicit approval and retry",
+  "current_revision_visual_acceptance": "PENDING: README manual UI regression checklist",
+  "historical_browser_acceptance": {
+    "revision": "16a3aca",
+    "complete_workflows": 2,
+    "applies_to_current_ui": false
   },
-  "known_demo_blockers": [],
+  "ready_for_shared_acceptance": false,
   "runtime_archive": {
     "filename": "IoTForge-windows-x64.zip",
-    "bytes": 335833,
-    "sha256": "2e81565adbf2dd9d70ec99771cd42e3b7ce57f26b0e13b1d7a8ccc23f2cd24f1"
+    "bytes": 369161,
+    "sha256": "98976346234382ceb0c070ed84728c924078f4edcff0273e03cb7729c8cadae1"
   }
 }

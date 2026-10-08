@@ -111,6 +111,27 @@ def centroid(layout):
     return {"x": sum(p["x"] for p in points) / len(points), "y": sum(p["y"] for p in points) / len(points)}
 
 
+def room_position(layout, point):
+    """Project new gateway proposals to an area interior before C++ evaluation.
+
+    A 24 logical-unit inset fits the editor marker. Gateways retain the schema's
+    x/y/active fields; room binding is editor-only. Out-of-floor AI proposals are
+    still rejected rather than disguised as valid proposals.
+    """
+    if not (0 <= point['x'] <= layout['floor']['width'] and
+            0 <= point['y'] <= layout['floor']['height']):
+        return point
+    if not layout['rooms']:
+        raise ValueError('Add an area before placing a gateway')
+    def distance(room):
+        return (point['x'] - min(max(point['x'], room['x']), room['x'] + room['width'])) ** 2 + (
+            point['y'] - min(max(point['y'], room['y']), room['y'] + room['height'])) ** 2
+    room = min(layout['rooms'], key=distance)
+    dx, dy = min(24, room['width'] / 2), min(24, room['height'] / 2)
+    return {'x': min(max(point['x'], room['x'] + dx), room['x'] + room['width'] - dx),
+            'y': min(max(point['y'], room['y'] + dy), room['y'] + room['height'] - dy)}
+
+
 def design(runner, settings, layout, prompt):
     candidate = copy.deepcopy(layout)
     source, warning = "ollama", None
@@ -133,12 +154,12 @@ def design(runner, settings, layout, prompt):
             candidate["devices"].append({"id": ("temp_" if kind == "temperature_sensor" else "leak_") + room["id"],
                 "type": kind, "x": room["x"] + room["width"] / 2, "y": room["y"] + room["height"] / 2, "room_id": room["id"]})
     candidate["requirements"] = proposal["requirements"]
-    candidate["gateways"] = [{"id": "gateway_" + str(index + 1), **point, "active": True} for index, point in enumerate(proposal["gateways"])]
+    candidate["gateways"] = [{"id": "gateway_" + str(index + 1), **room_position(candidate, point), "active": True} for index, point in enumerate(proposal["gateways"])]
     try:
         validate_placement(candidate)
     except ValueError as exc:
         source, warning = "deterministic_fallback", "Rejected AI placement: " + str(exc)
-        candidate["gateways"] = [{"id": "gateway_1", **centroid(candidate), "active": True}]
+        candidate["gateways"] = [{"id": "gateway_1", **room_position(candidate, centroid(candidate)), "active": True}]
         candidate["requirements"] = fallback_requirements(prompt, layout["requirements"])
         validate_placement(candidate)
     result = simulate(runner, candidate)
@@ -181,7 +202,7 @@ def optimize(runner, settings, layout, prompt):
         reasoning = proposal["reasoning"]
         if len(proposal["gateways"]) != len(active): raise ValueError("Gateway count changed unexpectedly")
         candidate = copy.deepcopy(layout)
-        for gateway, point in zip([g for g in candidate["gateways"] if g["active"]], proposal["gateways"]): gateway.update(point)
+        for gateway, point in zip([g for g in candidate["gateways"] if g["active"]], proposal["gateways"]): gateway.update(room_position(candidate, point))
         validate_placement(candidate)
         proposed_result = simulate(runner, candidate); evaluated += 1
         if score(proposed_result) > score(best_result): best_layout, best_result = candidate, proposed_result
@@ -195,7 +216,7 @@ def optimize(runner, settings, layout, prompt):
         for point in positions(layout):
             for index, original in enumerate(layout["gateways"]):
                 if not original["active"]: continue
-                candidate = copy.deepcopy(best_layout); candidate["gateways"][index].update(point)
+                candidate = copy.deepcopy(best_layout); candidate["gateways"][index].update(room_position(candidate, point))
                 validate_placement(candidate)
                 current = simulate(runner, candidate); evaluated += 1
                 if score(current) > score(best_result): best_layout, best_result = candidate, current
@@ -214,10 +235,10 @@ def failure(runner, layout, gateway_id, add_backup=False):
         if len(candidate["gateways"]) >= 2:
             raise ValueError("Two gateways already configured; activate or move the remaining gateway manually")
         base = copy.deepcopy(candidate)
-        candidate["gateways"].append({"id": "backup_" + gateway_id, **centroid(candidate), "active": True})
+        candidate["gateways"].append({"id": "backup_" + gateway_id, **room_position(candidate, centroid(candidate)), "active": True})
         best = simulate(runner, candidate)
         for point in positions(base):
-            trial = copy.deepcopy(candidate); trial["gateways"][-1].update(point)
+            trial = copy.deepcopy(candidate); trial["gateways"][-1].update(room_position(trial, point))
             result = simulate(runner, trial)
             if score(result) > score(best): candidate, best = trial, result
         after = best

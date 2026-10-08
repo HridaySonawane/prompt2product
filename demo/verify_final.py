@@ -5,6 +5,7 @@ The server must already be running. Repeats the full workflow twice.
 """
 import argparse
 import json
+import re
 from pathlib import Path
 import sys
 import urllib.request
@@ -31,7 +32,22 @@ def main():
     ai = request('/api/ai/health')
     if args.require_ai: assert ai['available'], ai
     with urllib.request.urlopen(args.url + '/') as response:
-        assert b'<div id="root">' in response.read(), 'Built frontend not served'
+        html = response.read().decode('utf-8')
+        assert '<div id="root">' in html, 'Built frontend not served'
+    assets = re.findall(r'(?:src|href)="(/assets/[^\"]+)"', html)
+    assert assets, 'Production asset links missing'
+    for asset in assets:
+        with urllib.request.urlopen(args.url + asset) as response:
+            assert response.status == 200 and len(response.read()) > 0, 'Production asset missing: ' + asset
+    def assert_placement(candidate):
+        for device in candidate['devices']:
+            room = next(r for r in candidate['rooms'] if r['id'] == device['room_id'])
+            assert room['x'] <= device['x'] <= room['x'] + room['width']
+            assert room['y'] <= device['y'] <= room['y'] + room['height']
+        for gateway in candidate['gateways']:
+            assert any(r['x'] + min(24, r['width']/2) <= gateway['x'] <= r['x'] + r['width'] - min(24, r['width']/2)
+                and r['y'] + min(24, r['height']/2) <= gateway['y'] <= r['y'] + r['height'] - min(24, r['height']/2)
+                for r in candidate['rooms']), 'Gateway marker outside area interior'
     for index in range(2):
         layout = json.loads((ROOT / 'shared/fixtures/network-hotel.json').read_text())
         # Minor room customization happens through the same contract as UI edits.
@@ -40,6 +56,7 @@ def main():
             'Monitor temperature in all five rooms, detect bathroom leaks, and deliver alerts within two seconds with at least 95% reliability.'})
         if args.require_ai: assert design['planner']['source'] == 'ollama', design['planner']
         INPUT_VALIDATOR.validate(design['layout']); OUTPUT_VALIDATOR.validate(design['simulation'])
+        assert_placement(design['layout'])
         assert len(design['layout']['devices']) == 6
         assert design['simulation']['requirements_evaluation']['pass']
         again = request('/api/simulate', design['layout'])
@@ -51,6 +68,7 @@ def main():
         assert not optimized['before']['requirements_evaluation']['pass']
         assert optimized['improved'] and optimized['after']['requirements_evaluation']['pass']
         assert optimized['layout']['requirements'] == weak['requirements']
+        assert_placement(optimized['layout'])
         assert optimized['after'] == request('/api/simulate', optimized['layout'])
         assert optimized['before']['heatmap'] != optimized['after']['heatmap']
         failed = request('/api/failure', {'layout': optimized['layout'], 'gateway_id': 'gateway_1'})
@@ -62,6 +80,7 @@ def main():
         assert recovered['recovered'] and recovered['after']['requirements_evaluation']['pass']
         assert not recovered['layout']['gateways'][0]['active']
         assert recovered['layout']['requirements'] == weak['requirements']
+        assert_placement(recovered['layout'])
         assert recovered['after'] == request('/api/simulate', recovered['layout'])
         records.append({'design': design, 'optimization': optimized, 'failure': failed, 'recovery': recovered})
         print(f'PASS workflow {index+1}: AI design -> real simulation -> verified optimization -> gateway failure -> backup recovery', flush=True)

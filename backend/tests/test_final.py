@@ -137,5 +137,37 @@ class FinalWorkflowTests(unittest.TestCase):
         self.assertFalse(self.client.get('/api/ai/health').json()['available'])
         self.assertTrue(self.post('simulate', self.layout)['requirements_evaluation']['pass'])
 
+    @patch('backend.planning.ask_ollama')
+    def test_ai_gateway_fitted_inside_area_before_simulation(self, ask):
+        ask.return_value = {'monitor_temperature': True, 'detect_leaks': True,
+            'requirements': self.layout['requirements'], 'gateways': [{'x': 240, 'y': 220}],
+            'reasoning': 'Near central areas'}
+        design = self.post('design', {'layout': self.layout, 'prompt': 'Monitor rooms and bathroom'})
+        gateway = design['layout']['gateways'][0]
+        self.assertTrue(any(r['x'] + min(24, r['width']/2) <= gateway['x'] <= r['x'] + r['width'] - min(24, r['width']/2)
+            and r['y'] + min(24, r['height']/2) <= gateway['y'] <= r['y'] + r['height'] - min(24, r['height']/2)
+            for r in design['layout']['rooms']))
+        self.assertEqual(design['planner']['source'], 'ollama')
+        self.assertEqual(design['simulation'], self.post('simulate', design['layout']))
+
+    def test_backup_gateway_fitted_inside_area_before_evaluation(self):
+        result = self.post('failure', {'layout': self.layout, 'gateway_id': 'gateway_1', 'add_backup': True})
+        gateway = result['layout']['gateways'][-1]
+        self.assertTrue(any(r['x'] + 24 <= gateway['x'] <= r['x'] + r['width'] - 24
+            and r['y'] + 24 <= gateway['y'] <= r['y'] + r['height'] - 24 for r in self.layout['rooms']))
+        self.assertEqual(result['after'], self.post('simulate', result['layout']))
+
+    def test_room_projection_does_not_disguise_invalid_ai_coordinates(self):
+        from backend.planning import room_position
+        self.assertEqual(room_position(self.layout, {'x': -999, 'y': 300}), {'x': -999, 'y': 300})
+        for width in (1, 2, 30, 100):
+            candidate = copy.deepcopy(self.layout)
+            candidate['rooms'] = [{**candidate['rooms'][0], 'width': width, 'height': width}]
+            point = room_position(candidate, {'x': 0, 'y': 0})
+            self.assertGreaterEqual(point['x'], 50)
+            self.assertLessEqual(point['x'], 50 + width)
+            self.assertGreaterEqual(point['y'], 50)
+            self.assertLessEqual(point['y'], 50 + width)
+
 
 if __name__ == '__main__': unittest.main()

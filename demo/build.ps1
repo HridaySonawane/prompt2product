@@ -26,6 +26,7 @@ Invoke-Checked -Program $python -Arguments @('-m', 'unittest', 'discover', '-s',
 Push-Location -LiteralPath (Join-Path $projectRoot 'frontend')
 try {
     if (!$SkipInstall) { Invoke-Checked -Program 'npm.cmd' -Arguments @('ci', '--no-fund') }
+    Invoke-Checked -Program 'npm.cmd' -Arguments @('test')
     Invoke-Checked -Program 'npm.cmd' -Arguments @('run', 'build')
 } finally { Pop-Location }
 & (Join-Path $PSScriptRoot 'package.ps1')
